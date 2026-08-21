@@ -13,5 +13,7 @@
  *       자격증명 유무 규칙 변경
  * 어댑터 내부 수정처럼 규약과 무관한 변경은 올리지 않아도 된다
  * (옛 워커도 정상 동작하며, 다음 zip 배포 때 자연히 따라온다).
+ * 단, 옛 코드가 오작동을 일으키는 중대한 어댑터 수정은 run.ps1 자동 업데이트를
+ * 발동시키기 위해 올린다 — v5: 우리금융 세션 차단(rentRemain 예산) 우회 배포.
  */
-export const WORKER_PROTOCOL_VERSION = 4;
+export const WORKER_PROTOCOL_VERSION = 5;
