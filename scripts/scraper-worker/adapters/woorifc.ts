@@ -1,5 +1,6 @@
 import zlib from "node:zlib";
-import { AuthError } from "./types";
+import { AuthError, pushFailure } from "./types";
+import type { CatalogFailure } from "./types";
 import type { AdapterContext, CatalogScrapeOptions, CatalogScrapeResult, ModelListOptions, ModelListResult, SiteAdapter } from "./types";
 import type { CatalogTrimEntry, TrimScrapeResult } from "../../../src/types/scraper";
 import { assertHttpUrl } from "../safe-url";
@@ -336,6 +337,7 @@ export const woorifcAdapter: SiteAdapter = {
     const { log } = ctx;
     let total = 0, skipped = 0, failed = 0, trimsDone = 0, trimsTotal = 0;
     const brandSummaries: CatalogScrapeResult["brands"] = [];
+    const failures: CatalogFailure[] = [];
 
     // 공통 데이터 1회 로드
     const modelList = await apiGet(ctx, `/apiw/auto/modelList_search?token=${tok()}`);
@@ -361,7 +363,8 @@ export const woorifcAdapter: SiteAdapter = {
           modelData = await apiGet(ctx, `/apiw/auto/modelData_${modelId}?token=${tok()}`);
           financeM = await apiGet(ctx, `/apiw/finance/woorifc_M${modelId}?token=${tok()}`);
         } catch (e) {
-          failed++; log(`[카탈로그] 모델 ${modelId} 로드 실패: ${(e as Error).message.slice(0, 50)}`); continue;
+          failed++; log(`[카탈로그] 모델 ${modelId} 로드 실패: ${(e as Error).message.slice(0, 50)}`);
+          pushFailure(failures, `${brand.name} 모델 ${modelId}`, `모델 정보 로드 실패: ${(e as Error).message.slice(0, 50)}`); continue;
         }
         const model = modelData?.model?.[modelId];
         const modelName = String(model?.name ?? modelId);
@@ -386,7 +389,10 @@ export const woorifcAdapter: SiteAdapter = {
           const evcost = `${modelId}:${td.lineup}:${tid}`;
           try {
             const r = await collectTrim(ctx, { brand: String(mc.MAKR_CD), model: String(mc.REP_CARTP_CD), trim: String(mc.VHCL_MDEL_CD) }, price, modelYear, evcost);
-            if (Object.keys(r.baseRates).length === 0) failed++;
+            if (Object.keys(r.baseRates).length === 0) {
+              failed++;
+              pushFailure(failures, `${modelName} ${trimLabel}`, r.warnings[0] ?? "월납입금 산출 0건");
+            }
             const entry: CatalogTrimEntry = {
               brandCd: brand.brandCd, brandName: brand.name,
               modelCd: modelId, modelName,
@@ -407,6 +413,7 @@ export const woorifcAdapter: SiteAdapter = {
               throw new Error(`우리금융 사용량 제한 감지 — "${trimLabel}" 에서 중단(이번 실행 수집 ${total}건은 저장됨). 10분 이상 뒤에 다시 실행하면 이어서 수집합니다.`);
             }
             failed++; log(`[카탈로그] ${trimLabel} 수집 실패: ${(e as Error).message.slice(0, 60)}`);
+            pushFailure(failures, `${modelName} ${trimLabel}`, (e as Error).message.slice(0, 60));
           }
           // 트림마다 진행률 갱신 — 모델 단위로만 올리면 트림당 수 분 걸리는 날엔
           // 화면이 몇 분째 0으로 보여 멈춘 것으로 오인된다.
@@ -418,6 +425,6 @@ export const woorifcAdapter: SiteAdapter = {
       }
       brandSummaries.push({ brandCd: brand.brandCd, name: brand.name, trims: brandTrims });
     }
-    return { total, skipped, failed, brands: brandSummaries };
+    return { total, skipped, failed, brands: brandSummaries, failures };
   },
 };

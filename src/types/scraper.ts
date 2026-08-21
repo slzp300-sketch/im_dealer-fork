@@ -107,6 +107,8 @@ export interface CatalogScrapeSummary {
   brands: { brandCd: string; name: string; trims: number }[];
   /** 이번 실행에서 실제 수집된 차량별 트림 수 — 워커가 entry 스트림에서 집계(스킵분 제외). 구버전 워커 결과엔 없다. */
   models?: { brandName: string; modelName: string; trims: number }[];
+  /** 실패 내역(무엇이 왜) — 어댑터가 상한 30건까지 수집. 구버전 워커 결과엔 없다. */
+  failures?: { label: string; reason: string }[];
   finishedAt: string; // ISO
 }
 
