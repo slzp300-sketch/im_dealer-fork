@@ -58,7 +58,8 @@ const login = await page.request.post(`${BASE}/api/dev/login`, { data: {} });
 console.log("dev/login:", login.status());
 
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-const email = process.env.DEV_LOGIN_EMAIL?.trim()!;
+const email = process.env.DEV_LOGIN_EMAIL?.trim();
+if (!email) throw new Error("DEV_LOGIN_EMAIL이 .env에 필요합니다.");
 const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 500 });
 const auth = data?.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
 if (!auth) throw new Error("auth account not found");
