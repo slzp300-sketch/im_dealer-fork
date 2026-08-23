@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
         phone,
         marketingConsent: parsed.data.marketingConsent,
         profileCompleted: true,
-        // 추천 코드 사후 입력 창구(7일)의 기준 시각. 최초 완료 때만 기록한다.
+        // 추천 코드 사후 입력 창구(14일)의 기준 시각. 최초 완료 때만 기록한다.
         ...(!wasProfileCompleted ? { profileCompletedAt: completedAt } : {}),
       },
     });
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
 
   // 최초 가입 완료 시에만 추천 인정. 직접 입력한 코드가 쿠키보다 우선한다.
   // 가입 저장과 분리해 처리한다 — 인정이 일시 오류로 실패해도 가입은 성공이고,
-  // 트랜잭션 롤백 덕분에 회원이 창구(7일) 안에 쿠폰함 카드로 다시 시도할 수 있다.
+  // 트랜잭션 롤백 덕분에 회원이 창구(14일) 안에 쿠폰함 카드로 다시 시도할 수 있다.
   const referralRawCode = typedReferralCode ?? referralFromCookie;
   let referralApplyFailed = false;
   let referralAttempted = false;

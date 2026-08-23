@@ -1,6 +1,11 @@
-import { type Prisma, type QuoteStatus } from "@prisma/client";
+import { type CouponStatus, type Prisma, type QuoteStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCouponSummary, type CouponBoxSummary } from "@/lib/member-queries/coupons";
+import {
+  isReferralEntryWindowOpen,
+  referralEntryRemainingDays,
+} from "@/lib/referral/attribution";
+import { maskName } from "@/lib/referral/progress";
 
 export type MyPageStatusTone = "neutral" | "info" | "warning" | "positive" | "danger";
 
@@ -69,11 +74,34 @@ export interface MyPageProfile {
   consentedAt: Date | null;
 }
 
+export interface MyPageReferralEntry {
+  /** 사후 입력 창구 잔여 일수. 0이면 오늘 마감 */
+  remainingDays: number;
+}
+
+export interface MyPageReferredByCoupon {
+  status: CouponStatus;
+  title: string;
+  rewardLabel: string;
+  rewardAmount: number | null;
+}
+
+export interface MyPageReferredBy {
+  /** 마스킹된 추천인 이름 (예: 김*규) */
+  referrerName: string;
+  /** REFERRAL_RECEIVED 쿠폰 스냅샷. 정책 부재로 미발급이면 null */
+  coupon: MyPageReferredByCoupon | null;
+}
+
 export interface MyPageData {
   profile: MyPageProfile;
   quotes: MyPageQuote[];
   activeQuote: MyPageQuote | null;
   couponSummary: CouponBoxSummary;
+  /** 추천인 코드 사후 입력 배너 — 창구 안·미인정 회원일 때만 */
+  referralEntry: MyPageReferralEntry | null;
+  /** 추천으로 가입한 회원의 귀속 정보 — 미인정이면 null */
+  referredBy: MyPageReferredBy | null;
 }
 
 const STATUS_INFO: Record<QuoteStatus, MyPageQuoteStatus> = {
@@ -201,6 +229,7 @@ export async function getMyPageData(supabaseId: string): Promise<MyPageData> {
         id: true,
         supabaseId: true,
         profileCompleted: true,
+        profileCompletedAt: true,
         name: true,
         email: true,
         phone: true,
@@ -240,7 +269,7 @@ export async function getMyPageData(supabaseId: string): Promise<MyPageData> {
   const trimIds = [...new Set(savedQuotes.map((quote) => quote.trimId))];
   const quoteIds = savedQuotes.map((quote) => quote.id);
 
-  const [vehicles, trims, deliveries] = await Promise.all([
+  const [vehicles, trims, deliveries, referral] = await Promise.all([
     vehicleIds.length > 0
       ? prisma.vehicle.findMany({
           where: { id: { in: vehicleIds } },
@@ -260,6 +289,26 @@ export async function getMyPageData(supabaseId: string): Promise<MyPageData> {
           select: { savedQuoteId: true, status: true, createdAt: true, sentAt: true },
         })
       : [],
+    member
+      ? prisma.referral.findUnique({
+          where: { refereeId: member.id },
+          select: {
+            referrer: { select: { name: true } },
+            coupons: {
+              where: { policy: { trigger: "REFERRAL_RECEIVED" } },
+              // 정책이 여러 개면 쿠폰도 여러 장 발급된다 — 카드에는 최신 1장만 표시
+              orderBy: { issuedAt: "desc" },
+              select: {
+                status: true,
+                titleSnapshot: true,
+                rewardLabelSnapshot: true,
+                rewardAmountSnapshot: true,
+              },
+              take: 1,
+            },
+          },
+        })
+      : null,
   ]);
 
   const vehicleMap = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
@@ -324,6 +373,29 @@ export async function getMyPageData(supabaseId: string): Promise<MyPageData> {
       })
     : { heldCount: 0, pendingCount: 0, totalAmount: 0 };
 
+  // 배너(미인정·창구 안)와 추천인 카드(인정됨)는 상호 배타다.
+  const referralEntry: MyPageReferralEntry | null =
+    member?.profileCompleted &&
+    member.profileCompletedAt &&
+    !referral &&
+    isReferralEntryWindowOpen(member.profileCompletedAt)
+      ? { remainingDays: referralEntryRemainingDays(member.profileCompletedAt) }
+      : null;
+
+  const referredBy: MyPageReferredBy | null = referral
+    ? {
+        referrerName: maskName(referral.referrer.name),
+        coupon: referral.coupons[0]
+          ? {
+              status: referral.coupons[0].status,
+              title: referral.coupons[0].titleSnapshot,
+              rewardLabel: referral.coupons[0].rewardLabelSnapshot,
+              rewardAmount: referral.coupons[0].rewardAmountSnapshot,
+            }
+          : null,
+      }
+    : null;
+
   return {
     profile: {
       name: member?.name || "고객",
@@ -337,5 +409,7 @@ export async function getMyPageData(supabaseId: string): Promise<MyPageData> {
     quotes,
     activeQuote: chooseActiveQuote(quotes),
     couponSummary,
+    referralEntry,
+    referredBy,
   };
 }

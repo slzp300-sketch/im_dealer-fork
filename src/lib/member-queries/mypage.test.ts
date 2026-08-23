@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { REFERRAL_ENTRY_WINDOW_DAYS } from "@/lib/referral/attribution";
 
 const mocks = vi.hoisted(() => ({
   findMember: vi.fn(),
@@ -7,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   findTrims: vi.fn(),
   findDeliveries: vi.fn(),
   findCoupons: vi.fn(),
+  findReferral: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -17,6 +19,7 @@ vi.mock("@/lib/prisma", () => ({
     trim: { findMany: mocks.findTrims },
     quoteDelivery: { findMany: mocks.findDeliveries },
     issuedCoupon: { findMany: mocks.findCoupons },
+    referral: { findUnique: mocks.findReferral },
   },
 }));
 
@@ -30,6 +33,7 @@ describe("getMyPageData", () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.findCoupons.mockResolvedValue([]);
+    mocks.findReferral.mockResolvedValue(null);
   });
 
   it("현재 회원의 견적만 조회해 진행 중인 견적과 최근 전송 상태를 구성한다", async () => {
@@ -202,9 +206,12 @@ describe("getMyPageData", () => {
       quotes: [],
       activeQuote: null,
       couponSummary: { heldCount: 0, pendingCount: 0, totalAmount: 0 },
+      referralEntry: null,
+      referredBy: null,
     });
     expect(mocks.findDeliveries).not.toHaveBeenCalled();
     expect(mocks.findCoupons).not.toHaveBeenCalled();
+    expect(mocks.findReferral).not.toHaveBeenCalled();
   });
 
   it("보유·지급예정 쿠폰을 요약해 함께 돌려준다", async () => {
@@ -236,5 +243,106 @@ describe("getMyPageData", () => {
       pendingCount: 1,
       totalAmount: 400_000,
     });
+  });
+
+  it("추천 코드 미입력·창구 안 회원에게는 잔여 일수를 돌려준다", async () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    mocks.findMember.mockResolvedValue({
+      id: "member-1",
+      supabaseId: "sb-1",
+      name: "홍길동",
+      email: null,
+      phone: null,
+      provider: "kakao",
+      channelRelation: "ADDED",
+      marketingConsent: false,
+      consentedAt: null,
+      profileCompleted: true,
+      profileCompletedAt: new Date(Date.now() - 2 * dayMs),
+    });
+    mocks.findQuotes.mockResolvedValue([]);
+    mocks.findVehicles.mockResolvedValue([]);
+    mocks.findTrims.mockResolvedValue([]);
+    mocks.findDeliveries.mockResolvedValue([]);
+
+    const data = await getMyPageData("sb-1");
+
+    expect(data.referralEntry).toEqual({
+      remainingDays: REFERRAL_ENTRY_WINDOW_DAYS - 2,
+    });
+    expect(data.referredBy).toBeNull();
+  });
+
+  it("창구가 지난 미인정 회원에게는 배너 데이터를 주지 않는다", async () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    mocks.findMember.mockResolvedValue({
+      id: "member-1",
+      supabaseId: "sb-1",
+      name: "홍길동",
+      email: null,
+      phone: null,
+      provider: "kakao",
+      channelRelation: "ADDED",
+      marketingConsent: false,
+      consentedAt: null,
+      profileCompleted: true,
+      profileCompletedAt: new Date(
+        Date.now() - (REFERRAL_ENTRY_WINDOW_DAYS + 1) * dayMs,
+      ),
+    });
+    mocks.findQuotes.mockResolvedValue([]);
+    mocks.findVehicles.mockResolvedValue([]);
+    mocks.findTrims.mockResolvedValue([]);
+    mocks.findDeliveries.mockResolvedValue([]);
+
+    const data = await getMyPageData("sb-1");
+
+    expect(data.referralEntry).toBeNull();
+    expect(data.referredBy).toBeNull();
+  });
+
+  it("추천으로 가입한 회원에게는 마스킹된 추천인과 쿠폰 상태를 돌려준다", async () => {
+    mocks.findMember.mockResolvedValue({
+      id: "member-1",
+      supabaseId: "sb-1",
+      name: "김철수",
+      email: null,
+      phone: null,
+      provider: "kakao",
+      channelRelation: "ADDED",
+      marketingConsent: false,
+      consentedAt: null,
+      profileCompleted: true,
+      profileCompletedAt: new Date(),
+    });
+    mocks.findQuotes.mockResolvedValue([]);
+    mocks.findVehicles.mockResolvedValue([]);
+    mocks.findTrims.mockResolvedValue([]);
+    mocks.findDeliveries.mockResolvedValue([]);
+    mocks.findReferral.mockResolvedValue({
+      referrer: { name: "홍길동" },
+      coupons: [
+        {
+          status: "HELD",
+          titleSnapshot: "추천 가입 감사 상품권",
+          rewardLabelSnapshot: "모바일 상품권 10만원",
+          rewardAmountSnapshot: 100_000,
+        },
+      ],
+    });
+
+    const data = await getMyPageData("sb-1");
+
+    expect(data.referredBy).toEqual({
+      referrerName: "홍*동",
+      coupon: {
+        status: "HELD",
+        title: "추천 가입 감사 상품권",
+        rewardLabel: "모바일 상품권 10만원",
+        rewardAmount: 100_000,
+      },
+    });
+    // 추천이 인정된 회원에게는 사후 입력 배너를 띄우지 않는다.
+    expect(data.referralEntry).toBeNull();
   });
 });

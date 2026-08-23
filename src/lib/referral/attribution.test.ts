@@ -5,6 +5,7 @@ import {
   kstMonthRange,
   REFERRAL_ENTRY_WINDOW_DAYS,
   REFERRAL_MONTHLY_CAP,
+  referralEntryRemainingDays,
 } from "./attribution";
 
 const base = {
@@ -95,6 +96,40 @@ describe("isReferralEntryWindowOpen", () => {
     expect(referralEntryDeadline(now).getTime()).toBe(
       now.getTime() + REFERRAL_ENTRY_WINDOW_DAYS * msPerDay,
     );
+  });
+});
+
+describe("referralEntryRemainingDays", () => {
+  const now = new Date("2026-08-18T12:00:00+09:00");
+  const msPerDay = 24 * 60 * 60 * 1000;
+
+  it("완료 직후에는 창구 일수 전체가 남는다", () => {
+    expect(referralEntryRemainingDays(now, now)).toBe(REFERRAL_ENTRY_WINDOW_DAYS);
+  });
+
+  it("하루 지나면 1 줄고, 마감 당일은 0(오늘 마감)이다", () => {
+    const dayAgo = new Date(now.getTime() - msPerDay);
+    expect(referralEntryRemainingDays(dayAgo, now)).toBe(
+      REFERRAL_ENTRY_WINDOW_DAYS - 1,
+    );
+    const deadline = new Date(
+      now.getTime() - REFERRAL_ENTRY_WINDOW_DAYS * msPerDay,
+    );
+    expect(referralEntryRemainingDays(deadline, now)).toBe(0);
+  });
+
+  it("남은 시간이 하루 미만이면 올림한다", () => {
+    const almostDeadline = new Date(
+      now.getTime() - (REFERRAL_ENTRY_WINDOW_DAYS * msPerDay - 60_000),
+    );
+    expect(referralEntryRemainingDays(almostDeadline, now)).toBe(1);
+  });
+
+  it("창구가 지나면 음수다", () => {
+    const past = new Date(
+      now.getTime() - (REFERRAL_ENTRY_WINDOW_DAYS + 1) * msPerDay,
+    );
+    expect(referralEntryRemainingDays(past, now)).toBeLessThan(0);
   });
 });
 

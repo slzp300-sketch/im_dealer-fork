@@ -31,7 +31,7 @@ export default async function CouponBoxPage() {
   const hasAny = available.length > 0 || past.length > 0;
 
   // 가입 때 추천인 코드를 깜빡한 회원의 사후 입력 카드.
-  // 자격: 가입 완료 + 창구(7일) 이내 + 아직 추천 미인정.
+  // 자격: 가입 완료 + 창구(14일) 이내 + 아직 추천 미인정.
   let referralEntryDeadlineLabel: string | null = null;
   const member = await prisma.user.findFirst({
     where: { supabaseId: access.userId },

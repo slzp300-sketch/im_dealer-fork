@@ -2,7 +2,7 @@ export const REFERRAL_MONTHLY_CAP = 10;
 export const REFERRAL_COOKIE_NAME = "referral_code";
 export const REFERRAL_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 30; // 30일
 /** 가입 완료 후 추천인 코드를 사후 입력할 수 있는 창구(일) */
-export const REFERRAL_ENTRY_WINDOW_DAYS = 7;
+export const REFERRAL_ENTRY_WINDOW_DAYS = 14;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -47,6 +47,17 @@ export function isReferralEntryWindowOpen(
 export function referralEntryDeadline(profileCompletedAt: Date): Date {
   return new Date(
     profileCompletedAt.getTime() + REFERRAL_ENTRY_WINDOW_DAYS * MS_PER_DAY,
+  );
+}
+
+/** 사후 입력 창구의 잔여 일수(올림). 0이면 오늘 마감, 음수면 창구가 닫힌 상태다. */
+export function referralEntryRemainingDays(
+  profileCompletedAt: Date,
+  now: Date = new Date(),
+): number {
+  return Math.ceil(
+    (referralEntryDeadline(profileCompletedAt).getTime() - now.getTime()) /
+      MS_PER_DAY,
   );
 }
 

@@ -75,7 +75,7 @@ function toBefore(row: {
 
 /**
  * BLOCKED 해제. 행을 삭제하면 refereeId @unique 슬롯이 비워져 해당 회원이
- * 가입 창구(최초 완료 또는 7일 이내)에서 다시 추천 코드를 적용할 수 있다 —
+ * 가입 창구(최초 완료 또는 14일 이내)에서 다시 추천 코드를 적용할 수 있다 —
  * 이것이 T18 종단 거절(SELF_REFERRAL → BLOCKED)의 외길문을 여는 유일한 경로다.
  * 삭제된 원장 행은 before 스냅샷으로 AdminAuditLog 에 영구 보존되므로
  * 감사 추적 가능성은 유지된다(악용은 admin+ 권한 + 사유 필수로 방어).

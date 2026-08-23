@@ -8,6 +8,8 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
+import { ReferralEntryCountdownBanner } from "@/components/mypage/ReferralEntryCountdownBanner";
+import { ReferredByCard } from "@/components/mypage/ReferredByCard";
 import { getMyPageData } from "@/lib/member-queries/mypage";
 import { requireMember } from "@/lib/require-access";
 
@@ -54,6 +56,17 @@ export default async function MyPageHub() {
 
   return (
     <>
+      {data.referredBy ? (
+        <ReferredByCard
+          referrerName={data.referredBy.referrerName}
+          coupon={data.referredBy.coupon}
+        />
+      ) : data.referralEntry ? (
+        <ReferralEntryCountdownBanner
+          remainingDays={data.referralEntry.remainingDays}
+        />
+      ) : null}
+
       <section className="mb-7 md:mb-9">
         <p className="mb-2 text-[13px] font-extrabold text-brand">MY PAGE</p>
         <h1 className="text-[28px] font-extrabold tracking-[-0.02em] text-text-strong md:text-[36px]">

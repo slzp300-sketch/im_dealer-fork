@@ -13,7 +13,7 @@ interface ReferralCodeEntryCardProps {
 
 /**
  * 가입 때 추천인 코드를 깜빡한 회원의 사후 입력 카드.
- * 자격(가입 완료 7일 이내·미인정)이 있는 회원에게만 서버가 렌더한다.
+ * 자격(가입 완료 14일 이내·미인정)이 있는 회원에게만 서버가 렌더한다.
  */
 export function ReferralCodeEntryCard({ deadlineLabel }: ReferralCodeEntryCardProps) {
   const router = useRouter();

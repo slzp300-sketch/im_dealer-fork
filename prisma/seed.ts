@@ -1343,6 +1343,44 @@ async function main() {
   }
   console.log("   ✅ 추천/인기/베스트\n");
 
+  // 추천인 보상 정책 2건. update: {} — 금액·문구는 어드민에서 수정하며 재시드로 덮어쓰지 않는다.
+  // validDays 180: 발급(추천 귀속) 후 6개월 안에 계약(CONVERTED)하지 않으면 만료된다.
+  console.log("🎁 추천인 쿠폰 정책 생성...");
+  const referralCouponPolicies = [
+    {
+      code: "REFERRAL_RECEIVED_GIFT_100K",
+      trigger: "REFERRAL_RECEIVED",
+      title: "추천 가입 감사 상품권",
+      description: "계약을 완료하면 지급돼요",
+      rewardLabel: "모바일 상품권 10만원",
+      rewardAmount: 100000,
+      rewardKind: "GIFT",
+      termsNote: "계약 완료 후 영업담당자 확인을 거쳐 지급됩니다.",
+      validDays: 180,
+      displayOrder: 30,
+    },
+    {
+      code: "REFERRAL_GIVEN_GIFT_100K",
+      trigger: "REFERRAL_GIVEN",
+      title: "추천 감사 상품권",
+      description: "추천한 분이 계약을 완료하면 지급돼요",
+      rewardLabel: "모바일 상품권 10만원",
+      rewardAmount: 100000,
+      rewardKind: "GIFT",
+      termsNote: "피추천인 계약 완료 후 영업담당자 확인을 거쳐 지급됩니다.",
+      validDays: 180,
+      displayOrder: 40,
+    },
+  ] as const;
+  for (const policy of referralCouponPolicies) {
+    await prisma.couponPolicy.upsert({
+      where: { code: policy.code },
+      update: {},
+      create: policy,
+    });
+  }
+  console.log(`   ✅ ${referralCouponPolicies.length}개 추천인 쿠폰 정책\n`);
+
   console.log("✨ 시드 데이터 삽입 완료!");
 }
 

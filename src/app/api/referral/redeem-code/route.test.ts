@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hashIp } from "@/lib/ip-hash";
+import { REFERRAL_ENTRY_WINDOW_DAYS } from "@/lib/referral/attribution";
 import { POST } from "./route";
 
 const mocks = vi.hoisted(() => ({
@@ -97,9 +98,13 @@ describe("POST /api/referral/redeem-code", () => {
     expect(mocks.applyReferralOnProfileComplete).not.toHaveBeenCalled();
   });
 
-  it("가입 후 7일이 지나면 400", async () => {
+  it("가입 후 입력 기간이 지나면 400", async () => {
     mocks.requireActiveUser.mockResolvedValue({
-      user: activeUser({ profileCompletedAt: new Date(NOW - 8 * DAY) }),
+      user: activeUser({
+        profileCompletedAt: new Date(
+          NOW - (REFERRAL_ENTRY_WINDOW_DAYS + 1) * DAY,
+        ),
+      }),
       error: null,
     });
     const res = await POST(request({ code: "K4821" }));

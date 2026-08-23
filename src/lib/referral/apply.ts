@@ -51,7 +51,7 @@ async function recordBlockedReferral(input: {
 export interface ApplyReferralInput {
   inviteeUserId: string;
   rawCode: string | null | undefined;
-  /** 인정 창구 안인지 — 최초 가입 완료 시점이거나 완료 후 창구(7일) 이내 */
+  /** 인정 창구 안인지 — 최초 가입 완료 시점이거나 완료 후 창구(14일) 이내 */
   isWithinEntryWindow: boolean;
   inviteeKakaoId: string | null;
   signupIpHash?: string | null;
