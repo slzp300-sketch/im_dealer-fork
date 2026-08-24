@@ -1,27 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Search } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
 import type { VehicleListItem } from "@/types/api";
 import { RepresentativeQuotePrice } from "@/components/cars/RepresentativeQuotePrice";
 import { isSupabaseStorageUrl } from "@/lib/image-url";
-
-const DEFAULT_SEARCH_CHIPS = [
-  { label: "SUV", query: "SUV" },
-  { label: "세단", query: "세단" },
-  { label: "제네시스", query: "제네시스" },
-  { label: "기아", query: "기아" },
-] as const;
 
 type HeroSectionV2Props = {
   readonly featuredVehicle?: VehicleListItem;
 };
 
 export function HeroSectionV2({ featuredVehicle }: HeroSectionV2Props) {
-  const [searchQuery, setSearchQuery] = useState("");
-
   return (
     <section className="bg-white">
       <div className="mx-auto w-full max-w-[1120px] px-5 pb-10 pt-10 max-[340px]:px-4 max-[340px]:pt-8 md:px-8 md:pb-16 md:pt-20">
@@ -55,47 +45,48 @@ export function HeroSectionV2({ featuredVehicle }: HeroSectionV2Props) {
               </Link>
             </div>
 
-            {/* 간결 검색 */}
-            <form
-              action="/cars"
-              method="get"
-              className="mt-10 max-w-[520px] max-[340px]:mt-8"
-              aria-label="차량 검색"
+            {/* 오픈 한정 특가 이벤트 배너 */}
+            <Link
+              href="/event"
+              aria-label="오픈 한정 특가 이벤트 — 차종별 300~500만원 할인, 재고 소진 전 확인하기"
+              className="group relative mt-10 block overflow-hidden rounded-[16px] bg-[#04060E] shadow-[0_12px_32px_rgba(4,10,30,0.35)] transition-transform active:scale-[0.99] max-[340px]:mt-8"
             >
-              <div className="flex min-h-[54px] items-center gap-2.5 rounded-[14px] bg-[#F8FAFC] px-4 ring-[1.5px] ring-transparent transition-all focus-within:bg-white focus-within:ring-brand max-[340px]:gap-2 max-[340px]:px-3">
-                <Search size={18} className="shrink-0 text-text-muted" />
-                <input
-                  name="query"
-                  type="text"
-                  autoComplete="off"
-                  enterKeyHint="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="차량·브랜드·용도"
-                  className="min-h-11 min-w-0 flex-1 self-stretch bg-transparent text-[16px] font-medium text-text-strong outline-none placeholder:text-text-muted"
-                />
-                <button
-                  type="submit"
-                  className="min-h-11 shrink-0 rounded-[10px] bg-brand px-4 text-[13px] font-bold text-white transition-colors hover:bg-brand-pressed max-[340px]:px-3"
-                  aria-label="검색"
-                >
-                  검색
-                </button>
+              {/* 블루 글로우 배경 */}
+              <div aria-hidden className="absolute inset-0">
+                <div className="absolute inset-0 bg-[radial-gradient(120%_180%_at_72%_45%,rgba(37,99,235,0.42)_0%,rgba(9,14,34,0.85)_48%,#04060E_100%)]" />
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <span className="text-[12px] font-bold text-text-muted">인기</span>
-                {DEFAULT_SEARCH_CHIPS.map((chip) => (
-                  <Link
-                    key={chip.query}
-                    href={`/cars?query=${encodeURIComponent(chip.query)}`}
-                    className="inline-flex min-h-11 items-center rounded-full bg-white px-3.5 py-2 text-[13px] font-bold text-text-body ring-[1px] ring-[#E5E8EB] transition-all hover:ring-brand hover:text-brand active:scale-[0.98]"
-                  >
-                    {chip.label}
-                  </Link>
-                ))}
+              {/* 차량 클러스터 아트웍 */}
+              <Image
+                src="/images/event/open-event-cars.png"
+                alt=""
+                width={750}
+                height={375}
+                className="pointer-events-none absolute right-0 top-1/2 h-full w-auto -translate-y-1/2 select-none transition-transform duration-500 group-hover:scale-[1.02] [mask-image:linear-gradient(to_right,transparent,black_20%),linear-gradient(to_bottom,black,black)] [mask-composite:intersect] max-sm:top-auto max-sm:bottom-0 max-sm:translate-x-3 max-sm:translate-y-0 max-sm:[mask-image:linear-gradient(to_right,transparent,black_34%),linear-gradient(to_bottom,black,black)]"
+              />
+              {/* 텍스트 가독성 스크림 — 모바일에서 차량과 카피 겹침 대비 */}
+              <div
+                aria-hidden
+                className="absolute inset-y-0 left-0 z-[1] w-[56%] bg-gradient-to-r from-[#04060E] via-[#04060E]/55 to-transparent max-sm:w-[64%]"
+              />
+
+              {/* 카피 */}
+              <div className="relative z-10 px-5 py-10 max-[340px]:px-4 max-[340px]:py-8 md:px-7 md:py-12">
+                <p className="text-[18px] font-extrabold leading-[1.32] tracking-[-0.02em] text-white max-[340px]:text-[16px] md:text-[21px]">
+                  오픈 한정 <span className="text-[#3D6BFF]">NO</span> 마진!
+                  <br />
+                  차종별 300~500만원 할인
+                </p>
+                <p className="mt-2.5 inline-flex items-center gap-0.5 text-[12.5px] font-bold text-white/85 md:text-[13.5px]">
+                  재고 소진 전 확인하기
+                  <ChevronRight
+                    size={14}
+                    strokeWidth={2.6}
+                    className="transition-transform duration-200 group-hover:translate-x-0.5"
+                  />
+                </p>
               </div>
-            </form>
+            </Link>
           </div>
 
           {/* 우측: 인기 차량 1장 (데스크톱만) */}
