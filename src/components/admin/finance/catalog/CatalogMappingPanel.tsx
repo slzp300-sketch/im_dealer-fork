@@ -6,6 +6,7 @@ interface VehicleLite {
   id: string;
   brand: string;
   name: string;
+  isVisible?: boolean;
 }
 interface Props {
   financeCompanyId: string;
@@ -87,18 +88,20 @@ export default function CatalogMappingPanel({ financeCompanyId, productType, veh
   const [applyResult, setApplyResult] = useState<string | null>(null);
   const [applyDetails, setApplyDetails] = useState<TrimStatus[]>([]);
 
-  const vehicleById = useMemo(() => new Map(vehicles.map((v) => [v.id, v] as const)), [vehicles]);
+  // 사이트에서 미노출인 차량은 매핑 대상에서 제외 — 최신 연식만 남아 화면이 깔끔해진다 (8/21 회의 결정)
+  const visibleVehicles = useMemo(() => vehicles.filter((v) => v.isVisible !== false), [vehicles]);
+  const vehicleById = useMemo(() => new Map(visibleVehicles.map((v) => [v.id, v] as const)), [visibleVehicles]);
   const brands = useMemo(
-    () => Array.from(new Set(vehicles.map((v) => v.brand))).sort((a, b) => a.localeCompare(b, "ko")),
-    [vehicles]
+    () => Array.from(new Set(visibleVehicles.map((v) => v.brand))).sort((a, b) => a.localeCompare(b, "ko")),
+    [visibleVehicles]
   );
   const brandVehicles = useMemo(() => {
     const q = vehicleQuery.trim().toLowerCase();
-    return vehicles
+    return visibleVehicles
       .filter((v) => v.brand === brand)
       .filter((v) => !q || v.name.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  }, [vehicles, brand, vehicleQuery]);
+  }, [visibleVehicles, brand, vehicleQuery]);
   const selectedVehicles = useMemo(
     () => selectedIds.map((id) => vehicleById.get(id)).filter((v): v is VehicleLite => !!v),
     [selectedIds, vehicleById]
@@ -180,7 +183,7 @@ export default function CatalogMappingPanel({ financeCompanyId, productType, veh
         const found = Object.values(merged).filter(Boolean).length;
         setNotice(
           found > 0
-            ? { ok: true, text: `자동 매핑 분석 완료 — 제안 ${found}건. 각 행의 [채택] 또는 [제안 전체 채택]을 누르세요.` }
+            ? { ok: true, text: "자동 매핑 분석 완료 — 채택할 제안이 있으면 각 행에 표시됩니다 (이미 매핑된 트림은 다시 묻지 않습니다)." }
             : { ok: true, text: "자동 매핑 분석 완료 — 새로 제안할 항목이 없습니다." }
         );
       } catch {
@@ -294,7 +297,7 @@ export default function CatalogMappingPanel({ financeCompanyId, productType, veh
       let okCount = 0;
       let failCount = 0;
       for (const [trimId, s] of Object.entries(suggestions)) {
-        if (!s) continue;
+        if (!isActionableSuggestion(trimId, s)) continue;
         try {
           const res = await fetch("/api/admin/capital-catalog/mappings", {
             method: "POST",
@@ -374,8 +377,22 @@ export default function CatalogMappingPanel({ financeCompanyId, productType, veh
     }
   };
 
-  const hasSuggestions = Object.values(suggestions).some(Boolean);
   const allRows = useMemo(() => Object.values(rowsByVehicle).flat(), [rowsByVehicle]);
+  // 이미 같은 대상으로 매핑된 트림의 제안은 "할 일"이 아니다 — 다시 채택하라는 것처럼 보여
+  // 저장이 안 된 걸로 오해하게 만든다. 미매핑이거나 다른 대상(새 연식 등) 제안만 실행 대상으로 본다.
+  const mappingByTrim = useMemo(
+    () => new Map(allRows.filter((r) => r.mapping).map((r) => [r.trimId, r.mapping!] as const)),
+    [allRows]
+  );
+  const isActionableSuggestion = useCallback(
+    (trimId: string, s: Suggestion | null | undefined): s is Suggestion => {
+      if (!s) return false;
+      const m = mappingByTrim.get(trimId);
+      return !m || m.catalogTrim.id !== s.catalogTrimId;
+    },
+    [mappingByTrim]
+  );
+  const hasSuggestions = Object.entries(suggestions).some(([tid, s]) => isActionableSuggestion(tid, s));
   const mappedCount = allRows.filter((r) => r.mapping).length;
   const blockedCount = allRows.filter((r) => r.mapping && precheck[r.trimId]?.ok === false).length;
 
@@ -594,11 +611,11 @@ export default function CatalogMappingPanel({ financeCompanyId, productType, veh
                       {/* 반영 불가 사유 — 배지에 마우스를 올리지 않아도 보이게 */}
                       {blocked && status?.reason && <p className="mt-1 ml-6 text-[11px] text-red-500">{status.reason}</p>}
 
-                      {/* 자동 제안 미리보기 */}
-                      {s && (
+                      {/* 자동 제안 미리보기 — 이미 같은 대상으로 매핑된 트림에는 띄우지 않는다 */}
+                      {isActionableSuggestion(r.trimId, s) && (
                         <div className="mt-1.5 ml-6 flex flex-wrap items-center gap-2 rounded-lg bg-[#F8F9FC] px-2.5 py-1.5 text-xs">
                           <span className="text-[#5A6080]">
-                            제안: <b>{s.label}</b> ({s.vehiclePrice.toLocaleString()}원 · {s.confidence === "exact" ? "정확" : "유사"})
+                            {mapping ? "재매핑 제안" : "제안"}: <b>{s.label}</b> ({s.vehiclePrice.toLocaleString()}원 · {s.confidence === "exact" ? "정확" : "유사"})
                           </span>
                           <button
                             type="button"

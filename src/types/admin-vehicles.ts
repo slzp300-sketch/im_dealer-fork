@@ -5,6 +5,7 @@ export interface AdminVehicleLite {
   id: string;
   brand: string;
   name: string;
+  isVisible: boolean;
 }
 
 export interface AdminVehicle {
