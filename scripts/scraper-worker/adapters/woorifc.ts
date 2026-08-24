@@ -27,6 +27,22 @@ const RATE_CELLS: { month: number; km: number; dist: number }[] = [
 ];
 
 const reqDelay = (config: Record<string, unknown> | null): number => paceDelay(config, 500);
+
+// 로그인 페이지가 로드 직후 스스로 리다이렉트하면(networkidle2 뒤 JS 이동) 평가 중이던
+// 프레임이 떨어져 나가 "Attempted to use detached Frame" 으로 죽는다.
+// 네비게이션이 가라앉길 기다렸다가 재평가한다.
+async function evalSettled<T>(page: AdapterContext["page"], fn: () => T, tries = 3): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return (await page.evaluate(fn)) as T;
+    } catch (e) {
+      const msg = String(e);
+      if (i >= tries || !/detached|Execution context was destroyed|Cannot find context/i.test(msg)) throw e;
+      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 15000 }).catch(() => null);
+      await sleep(1000);
+    }
+  }
+}
 function cfg<T>(config: Record<string, unknown> | null, key: string, fallback: T): T {
   const v = config?.[key];
   return v === undefined || v === null ? fallback : (v as T);
@@ -253,7 +269,7 @@ export const woorifcAdapter: SiteAdapter = {
     await page.goto(assertHttpUrl(credentials.loginUrl, "loginUrl"), { waitUntil: "networkidle2", timeout: 45000 });
     await sleep(1000);
     // 이미 로그인 세션이 아니면(로그인 폼 존재) 사람 로그인 대기 (nProtect 키패드 — 자동 타이핑 불가)
-    const needLogin = await page.evaluate(() => !!document.querySelector("input[name='user_id'], #user_id, input[type='password']"));
+    const needLogin = await evalSettled(page, () => !!document.querySelector("input[name='user_id'], #user_id, input[type='password']"));
     if (needLogin) {
       await ctx.waitForHuman("우리금융 로그인을 워커 브라우저에서 완료(사번 ID + 키패드 비밀번호)한 뒤 [재개]를 누르세요.");
     }
@@ -269,7 +285,7 @@ export const woorifcAdapter: SiteAdapter = {
       await page.goto(estUrl.toString(), { waitUntil: "networkidle2", timeout: 45000 });
     }
     await sleep(1500);
-    const info = await page.evaluate(() => {
+    const info = await evalSettled(page, () => {
       const w = window as Window & {
         token?: unknown;
         estmConfig?: Array<{ branchShop?: unknown }>;
