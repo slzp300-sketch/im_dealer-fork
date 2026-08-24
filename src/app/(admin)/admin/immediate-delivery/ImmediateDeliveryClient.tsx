@@ -42,8 +42,12 @@ function fmtNum(n: number | null | undefined): string {
   return n == null ? "-" : n.toLocaleString("ko-KR");
 }
 
+// 서버/클라이언트 ICU 차이("PM" vs "오후")로 하이드레이션이 깨지지 않도록 KST 기준 수동 포맷
 function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+  const kst = new Date(new Date(iso).getTime() + 9 * 3600_000);
+  const h = kst.getUTCHours();
+  const h12 = h % 12 || 12;
+  return `${kst.getUTCFullYear()}. ${kst.getUTCMonth() + 1}. ${kst.getUTCDate()}. ${h < 12 ? "오전" : "오후"} ${h12}:${String(kst.getUTCMinutes()).padStart(2, "0")}`;
 }
 
 export function ImmediateDeliveryClient({
