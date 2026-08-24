@@ -94,6 +94,29 @@ export default function CapitalCatalogManager({ financeCompanies, vehicles }: Pr
 
   useEffect(() => stopPolling, [stopPolling]);
 
+  // 화면 진입·캐피탈사 변경 시 서버의 활성 작업을 복원한다 — 새로고침해도
+  // 진행 중/개입필요 작업 카드가 살아 있어야 취소·재개가 가능하다.
+  useEffect(() => {
+    if (!selectedFcId) return;
+    let stale = false;
+    (async () => {
+      try {
+        const d = await (
+          await fetch(`/api/admin/scrape-jobs?financeCompanyId=${selectedFcId}&productType=${encodeURIComponent(productType)}`)
+        ).json();
+        const active = (d.jobs ?? []).find(
+          (j: { id: string; jobType: ScrapeJobType }) => j.jobType === "models" || j.jobType === "catalog"
+        );
+        if (!stale && active) watchJob(active.id, active.jobType);
+      } catch {
+        /* 조회 실패는 무시 — 새 작업 시작 흐름에는 영향 없음 */
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [selectedFcId, productType, watchJob]);
+
   // 캐피탈사 변경 시 잡 상태 초기화 (다른 캐피탈사 잡을 계속 보지 않도록)
   const handleFcChange = (id: string) => {
     setSelectedFcId(id);

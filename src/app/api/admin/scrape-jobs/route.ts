@@ -17,6 +17,32 @@ import {
 
 const IN_FLIGHT = ["pending", "running", "needs_human"];
 
+// GET /api/admin/scrape-jobs?financeCompanyId=&productType= — 진행 중(활성) 작업 조회.
+// 화면을 새로고침하거나 나중에 다시 들어와도 기존 작업 카드를 복원해 취소·재개할 수 있게 한다.
+export async function GET(request: NextRequest) {
+  const { error } = await requireRoleAtLeast("admin");
+  if (error) return error;
+  try {
+    const sp = new URL(request.url).searchParams;
+    const financeCompanyId = sp.get("financeCompanyId");
+    const productType = sp.get("productType");
+    const jobs = await prisma.scrapeJob.findMany({
+      where: {
+        status: { in: IN_FLIGHT },
+        ...(financeCompanyId ? { financeCompanyId } : {}),
+        ...(productType ? { productType } : {}),
+      },
+      select: { id: true, jobType: true, status: true, workerId: true, createdAt: true, financeCompanyId: true },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    return NextResponse.json({ jobs });
+  } catch (e) {
+    console.error("[scrape-jobs GET]", e);
+    return NextResponse.json({ error: "조회 실패" }, { status: 500 });
+  }
+}
+
 /** 차량의 브랜드+차량명으로 캐피탈사 차량 식별자를 자동 인식 (수동 연결이 없을 때). */
 function deriveScraperRef(adapter: string, brand?: string | null, name?: string | null) {
   if (adapter === "ORIX" && brand && name) {
