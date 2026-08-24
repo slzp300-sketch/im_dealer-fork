@@ -312,6 +312,8 @@ export const applyCatalogSchema = z.object({
   productType: z.enum(["장기렌트", "리스", "금융리스", "할부"]).default("장기렌트"),
   weekOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "weekOf 형식은 YYYY-MM-DD"),
   trimIds: z.array(z.string().min(1)).min(1, "트림을 1개 이상 선택하세요"),
+  // true 면 시트를 쓰지 않고 트림별 반영 가능 여부·사유만 돌려준다 (반영 전 미리보기용)
+  dryRun: z.boolean().optional(),
 });
 
 // 작업 상태 변경 (PATCH /api/admin/scrape-jobs/[id])
