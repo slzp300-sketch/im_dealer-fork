@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Header } from "@/components/layout/Header";
+import { EventConsultBar } from "./EventConsultBar";
 import { VehicleCard, type EventCar } from "./VehicleCard";
 
 export const metadata: Metadata = {
@@ -103,7 +105,8 @@ const CARS: EventCar[] = [
 export default function EventPage() {
   return (
     <div className="min-h-screen bg-[#F5F5F7] font-sans">
-      <div className="mx-auto w-full max-w-[390px]">
+      <Header />
+      <div className="w-full">
         <header className="bg-[linear-gradient(180deg,#0A1633_0%,#050910_100%)] px-6 pb-6 pt-12 text-center">
           <p className="text-[12px] font-semibold text-[#7EC8FF]">
             아임딜러AI OPEN EVENT
@@ -146,7 +149,7 @@ export default function EventPage() {
           </div>
         </main>
 
-        <section className="bg-[#0066FF] px-5 pb-7 pt-7">
+        <section className="bg-[#0066FF] px-5 pb-[calc(116px+env(safe-area-inset-bottom,0px))] pt-7">
           <h2 className="text-[18px] font-extrabold text-white">
             아임딜러 특별 오픈 이벤트
           </h2>
@@ -171,6 +174,7 @@ export default function EventPage() {
           </p>
         </section>
       </div>
+      <EventConsultBar />
     </div>
   );
 }
