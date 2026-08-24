@@ -1,9 +1,10 @@
 "use client";
 
-export interface EventCar {
+export type EventCar = {
   id: string;
   brand: string;
   model: string;
+  trim: string;
   option: string;
   stock: string;
   image: string;
@@ -12,124 +13,115 @@ export interface EventCar {
   discount: string;
   listPrice: string;
   featured?: boolean;
-}
+};
 
-function ArrowIcon({ className }: { className: string }) {
+// Fades the baked-in studio plate (bottom) and faint backdrop edges so the
+// PNG dissolves into the card instead of ending in a hard rectangular cut.
+const CAR_IMAGE_MASK = [
+  "linear-gradient(to top, transparent 6%, black 25%)",
+  "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+  "linear-gradient(to bottom, transparent 0%, black 5%)",
+].join(", ");
+
+function StockBadge({ stock }: { stock: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        d="M5 12h14m-6-6 6 6-6 6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <span className="shrink-0 rounded-[6px] bg-[#E8F1FF] px-2 py-1 text-[11px] font-bold leading-none text-[#1A73E8]">
+      {stock}
+    </span>
   );
 }
 
 export function VehicleCard({ car }: { car: EventCar }) {
-  const featured = car.featured === true;
+  const featured = Boolean(car.featured);
+
+  const subText = featured ? "text-[#9CA3AF]" : "text-[#8A8F98]";
 
   return (
     <button
       type="button"
       onClick={() => undefined}
-      className={`block w-full cursor-pointer rounded-[20px] p-4 text-left transition-all duration-200 ease-out hover:scale-[1.02] hover:shadow-[0_14px_36px_rgba(13,26,64,0.16)] active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0150F5] focus-visible:ring-offset-2 ${
-        featured
-          ? "bg-[#2D2F36] shadow-[0_12px_30px_rgba(15,18,28,0.38)]"
-          : "border border-[#E6E8EE] bg-white shadow-[0_6px_20px_rgba(13,26,64,0.06)]"
-      }`}
+      className={[
+        "w-full cursor-pointer rounded-[20px] px-4 pb-4 pt-3.5 text-left transition-transform duration-150",
+        "hover:scale-[1.02] active:scale-[0.98]",
+        featured ? "bg-[#2B2D33]" : "bg-white shadow-[0_6px_18px_rgba(17,24,39,0.06)]",
+      ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-3">
+      {featured ? (
+        <div className="mb-2 flex items-center justify-between">
+          <span className="rounded-[6px] bg-[#FFE14D] px-2 py-1 text-[11px] font-extrabold leading-none text-black">
+            주목 차량
+          </span>
+          <StockBadge stock={car.stock} />
+        </div>
+      ) : null}
+
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p
-            className={`text-[12px] font-medium leading-none ${
-              featured ? "text-[#C5C8D0]" : "text-[#8B8F9A]"
-            }`}
-          >
+          <p className={`text-[12px] leading-none ${featured ? "text-[#C5C8CE]" : "text-[#8A8F98]"}`}>
             {car.brand}
           </p>
-          <p
-            className={`mt-1.5 text-[17px] font-extrabold leading-[1.25] ${
-              featured ? "text-white" : "text-[#111827]"
-            }`}
-          >
-            {car.model}
-          </p>
-          <p
-            className={`mt-1 text-[12px] leading-[1.35] ${
-              featured ? "text-[#A7ACB6]" : "text-[#8B8F9A]"
-            }`}
-          >
-            {car.option}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {featured ? (
-            <span className="rounded-[6px] bg-[#0066FF] px-2 py-1 text-[11px] font-bold leading-none text-white">
-              주목 차량
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+            <span className={`text-[18px] font-extrabold leading-tight ${featured ? "text-white" : "text-black"}`}>
+              {car.model}
             </span>
+            {car.trim ? (
+              <span className={`text-[12px] leading-tight ${featured ? "text-[#B0B4BC]" : "text-[#555555]"}`}>
+                {car.trim}
+              </span>
+            ) : null}
+          </p>
+          {car.option ? (
+            <p className={`mt-1 text-[11px] leading-[1.35] ${subText}`}>
+              {car.option}
+            </p>
           ) : null}
-          <span
-            className={`rounded-[6px] px-2 py-1 text-[11px] font-bold leading-none ${
-              featured
-                ? "bg-white text-[#111827]"
-                : "bg-[#F3F4F6] text-[#111827]"
-            }`}
-          >
-            {car.stock}
-          </span>
         </div>
+        {featured ? null : <StockBadge stock={car.stock} />}
       </div>
 
-      <div className="mt-3 h-[124px] w-full">
+      <div className="mt-3 flex h-[144px] items-center justify-center drop-shadow-[0_12px_14px_rgba(0,0,0,0.20)]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={car.image}
           alt={`${car.brand} ${car.model}`}
-          className="h-full w-full object-contain"
-          loading="lazy"
+          className="max-h-full max-w-full object-contain"
+          style={{
+            WebkitMaskImage: CAR_IMAGE_MASK,
+            maskImage: CAR_IMAGE_MASK,
+            WebkitMaskComposite: "source-in",
+            maskComposite: "intersect",
+          }}
           decoding="async"
+          onError={(e) => {
+            e.currentTarget.style.visibility = "hidden";
+          }}
         />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-end gap-x-2 gap-y-1">
-        <span
-          className={`text-[13px] font-semibold line-through ${
-            featured ? "text-[#9AA0AB]" : "text-[#B0B4BD]"
-          }`}
-        >
-          월 {car.wasMonthly}만원
-        </span>
-        <ArrowIcon className="mb-0.5 h-4 w-4 shrink-0 text-[#0066FF]" />
-        <span className="flex items-baseline gap-0.5 text-[#0066FF]">
-          <span className="text-[13px] font-bold leading-none">월</span>
-          <span className="text-[32px] font-extrabold leading-none">
-            {car.nowMonthly}
+      <div className="mt-3 text-center">
+        <div className="flex items-end justify-center gap-1.5">
+          <span className={`flex items-baseline gap-px ${subText}`}>
+            <span className="text-[14px]">월</span>
+            <span className="text-[26px] font-bold leading-none line-through">{car.wasMonthly}</span>
+            <span className="text-[14px]">만원</span>
           </span>
-          <span className="text-[13px] font-bold leading-none">만원</span>
+          <span className={`mb-1 text-[16px] ${subText}`}>&gt;</span>
+          <span className="flex items-baseline gap-px text-[#1A73E8]">
+            <span className="text-[14px] font-bold">월</span>
+            <span className="text-[35px] font-extrabold leading-none">{car.nowMonthly}</span>
+            <span className="text-[14px] font-bold">만원</span>
+          </span>
+        </div>
+        <p className={`mt-1 text-[12px] ${subText}`}>
+          차량가 {car.listPrice}
+        </p>
+        <span className="mt-2 inline-flex min-w-[170px] justify-center rounded-full bg-[#FFF0F0] px-6 py-2 text-[16px] font-extrabold text-[#FF5A2E]">
+          {car.discount} 할인
         </span>
+        <p className={`mt-2 text-[11px] ${subText}`}>
+          60개월 · 초기비용 0원 · 연 2만km 기준
+        </p>
       </div>
-
-      <span className="mt-2 inline-flex rounded-full bg-[#FF4A4A] px-2.5 py-1 text-[12px] font-extrabold leading-none text-white">
-        {car.discount} 할인
-      </span>
-
-      <p
-        className={`mt-3 text-[11px] leading-[1.45] ${
-          featured ? "text-[#9AA0AB]" : "text-[#9AA0AB]"
-        }`}
-      >
-        차량가 {car.listPrice}
-        <br />
-        60개월 · 초기비용 0원 · 연 2만km 기준
-      </p>
     </button>
   );
 }
