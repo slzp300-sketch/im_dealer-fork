@@ -24,6 +24,15 @@ export const SHEET_HEADER = [
 
 const STOCK_TYPE_LABEL: Record<string, string> = { NORMAL: "정상", LIMITED: "한정/조건" };
 
+// 탭 구성: 출고 채널별 접두사로 그룹화한다.
+// 대리점 출고 = 브랜드별 탭, 금융사 출고 = 자리 탭(스크래퍼 연동 시 금융사별 탭으로 확장 예정).
+export const FINANCE_TAB_TITLE = "금융사출고";
+const DEFAULT_EMPTY_TAB = "시트1"; // 스프레드시트 생성 시 딸려오는 빈 기본 탭 — 발견하면 제거
+
+export function dealerTabTitle(brand: ImmediateDeliveryBrand): string {
+  return `대리점출고-${brand}`;
+}
+
 interface SheetConfig {
   clientEmail: string;
   privateKey: string;
@@ -140,24 +149,54 @@ async function sheetsApi<T>(token: string, sheetId: string, path: string, init?:
   return data;
 }
 
-/** 탭이 없으면 생성하고, 있으면 데이터 크기에 맞게 그리드를 조정한다. */
-async function ensureTab(token: string, sheetId: string, title: string, rowCount: number, columnCount: number) {
+/**
+ * 브랜드 동기화에 앞서 탭 구조를 정돈한다.
+ * - 대리점 탭이 없으면 생성(구 브랜드명 탭이 있으면 이름 변경으로 마이그레이션), 있으면 그리드 조정
+ * - 금융사출고 자리 탭이 없으면 생성 (생성 시 true 반환 → 호출자가 안내 문구를 채운다)
+ * - 기본 빈 탭(시트1)이 남아 있으면 삭제
+ */
+async function ensureTabs(
+  token: string,
+  sheetId: string,
+  brand: ImmediateDeliveryBrand,
+  rowCount: number,
+  columnCount: number,
+): Promise<{ financeTabCreated: boolean }> {
   const meta = await sheetsApi<{ sheets?: { properties: { sheetId: number; title: string } }[] }>(
     token,
     sheetId,
     "?fields=sheets.properties(sheetId,title)",
   );
-  const existing = meta.sheets?.find((s) => s.properties.title === title);
+  const byTitle = (t: string) => meta.sheets?.find((s) => s.properties.title === t);
+  const requests: unknown[] = [];
+
+  const title = dealerTabTitle(brand);
   const gridProperties = { rowCount: Math.max(rowCount + 5, 50), columnCount };
-  const request = existing
-    ? {
-        updateSheetProperties: {
-          properties: { sheetId: existing.properties.sheetId, gridProperties },
-          fields: "gridProperties(rowCount,columnCount)",
-        },
-      }
-    : { addSheet: { properties: { title, gridProperties } } };
-  await sheetsApi(token, sheetId, ":batchUpdate", { method: "POST", body: JSON.stringify({ requests: [request] }) });
+  // 채널 분리 이전에는 탭명이 브랜드명 그대로였다 — 있으면 새 이름으로 바꿔 재사용
+  const existing = byTitle(title) ?? byTitle(brand);
+  if (existing) {
+    requests.push({
+      updateSheetProperties: {
+        properties: { sheetId: existing.properties.sheetId, title, gridProperties },
+        fields: "title,gridProperties(rowCount,columnCount)",
+      },
+    });
+  } else {
+    requests.push({ addSheet: { properties: { title, gridProperties } } });
+  }
+
+  const financeTabCreated = !byTitle(FINANCE_TAB_TITLE);
+  if (financeTabCreated) {
+    requests.push({
+      addSheet: { properties: { title: FINANCE_TAB_TITLE, gridProperties: { rowCount: 50, columnCount } } },
+    });
+  }
+
+  const emptyTab = byTitle(DEFAULT_EMPTY_TAB);
+  if (emptyTab) requests.push({ deleteSheet: { sheetId: emptyTab.properties.sheetId } });
+
+  await sheetsApi(token, sheetId, ":batchUpdate", { method: "POST", body: JSON.stringify({ requests }) });
+  return { financeTabCreated };
 }
 
 export type SheetSyncResult =
@@ -230,11 +269,18 @@ export async function syncBrandSheet(brand: ImmediateDeliveryBrand): Promise<voi
   }
 
   const token = await getAccessToken(cfg);
-  await ensureTab(token, cfg.sheetId, brand, values.length, SHEET_HEADER.length);
-  const range = encodeURIComponent(`'${brand}'`);
-  await sheetsApi(token, cfg.sheetId, `/values/${range}:clear`, { method: "POST", body: "{}" });
-  await sheetsApi(token, cfg.sheetId, `/values/${encodeURIComponent(`'${brand}'!A1`)}?valueInputOption=RAW`, {
+  const { financeTabCreated } = await ensureTabs(token, cfg.sheetId, brand, values.length, SHEET_HEADER.length);
+  const title = dealerTabTitle(brand);
+  await sheetsApi(token, cfg.sheetId, `/values/${encodeURIComponent(`'${title}'`)}:clear`, { method: "POST", body: "{}" });
+  await sheetsApi(token, cfg.sheetId, `/values/${encodeURIComponent(`'${title}'!A1`)}?valueInputOption=RAW`, {
     method: "PUT",
     body: JSON.stringify({ values }),
   });
+  if (financeTabCreated) {
+    // 자리 탭 안내 문구는 최초 생성 시에만 쓴다 — 이후 수동 편집을 덮어쓰지 않는다.
+    await sheetsApi(token, cfg.sheetId, `/values/${encodeURIComponent(`'${FINANCE_TAB_TITLE}'!A1`)}?valueInputOption=RAW`, {
+      method: "PUT",
+      body: JSON.stringify({ values: [["금융사 출고 재고 — 준비 중 (스크래퍼 연동 시 금융사별 탭으로 제공 예정)"]] }),
+    });
+  }
 }
