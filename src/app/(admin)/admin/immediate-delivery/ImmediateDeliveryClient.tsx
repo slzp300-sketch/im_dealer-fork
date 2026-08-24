@@ -31,12 +31,23 @@ interface StockRowDetail {
 
 const STOCK_TYPE_LABEL: Record<string, string> = { NORMAL: "정상", LIMITED: "한정/조건" };
 
+// 출고 채널: 대리점(엑셀 업로드) | 금융사(추후 스크래퍼 연동 예정)
+const CHANNELS = [
+  { key: "dealer", label: "대리점 출고" },
+  { key: "finance", label: "금융사 출고" },
+] as const;
+type ChannelKey = (typeof CHANNELS)[number]["key"];
+
 function fmtNum(n: number | null | undefined): string {
   return n == null ? "-" : n.toLocaleString("ko-KR");
 }
 
+// 서버/클라이언트 ICU 차이("PM" vs "오후")로 하이드레이션이 깨지지 않도록 KST 기준 수동 포맷
 function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
+  const kst = new Date(new Date(iso).getTime() + 9 * 3600_000);
+  const h = kst.getUTCHours();
+  const h12 = h % 12 || 12;
+  return `${kst.getUTCFullYear()}. ${kst.getUTCMonth() + 1}. ${kst.getUTCDate()}. ${h < 12 ? "오전" : "오후"} ${h12}:${String(kst.getUTCMinutes()).padStart(2, "0")}`;
 }
 
 export function ImmediateDeliveryClient({
@@ -49,6 +60,7 @@ export function ImmediateDeliveryClient({
   sheetSyncEnabled: boolean;
 }) {
   const router = useRouter();
+  const [channel, setChannel] = useState<ChannelKey>("dealer");
   const [activeBrand, setActiveBrand] = useState<string>(
     snapshots[0]?.brand ?? IMMEDIATE_DELIVERY_BRANDS[0],
   );
@@ -62,44 +74,72 @@ export function ImmediateDeliveryClient({
           <div>
             <h1 className="text-xl font-bold text-[#1A1F36]">즉시출고 재고</h1>
             <p className="mt-1 text-sm text-[#9BA4C0]">
-              제조사에서 받은 즉시출고 재고리스트 엑셀을 업로드하면 브랜드별 최신 스냅샷으로 통합 관리됩니다.
+              즉시출고 차량을 출고 채널(대리점/금융사)별로 관리합니다.
             </p>
           </div>
-          <SheetPanel sheetUrl={sheetUrl} syncEnabled={sheetSyncEnabled} />
+          {channel === "dealer" && <SheetPanel sheetUrl={sheetUrl} syncEnabled={sheetSyncEnabled} />}
         </div>
 
-        <UploadPanel onApplied={(brand) => { setActiveBrand(brand); router.refresh(); }} />
-
-        <div className="flex gap-2">
-          {IMMEDIATE_DELIVERY_BRANDS.map((brand) => {
-            const s = snapshots.find((x) => x.brand === brand);
-            const active = brand === activeBrand;
-            return (
-              <button
-                key={brand}
-                type="button"
-                onClick={() => setActiveBrand(brand)}
-                className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                  active
-                    ? "bg-[#6066EE] text-white"
-                    : "bg-white text-[#5A6080] border border-[#E8EAF0] hover:bg-[#EEF0FF]"
-                }`}
-              >
-                {brand}
-                <span className={`ml-1.5 text-xs ${active ? "text-white/80" : "text-[#9BA4C0]"}`}>
-                  {s ? `${s.vehicleCount.toLocaleString("ko-KR")}대` : "없음"}
-                </span>
-              </button>
-            );
-          })}
+        <div className="flex gap-1 rounded-xl bg-[#E8EAF0] p-1 self-start">
+          {CHANNELS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setChannel(c.key)}
+              className={`rounded-lg px-5 py-2 text-sm font-bold transition-colors ${
+                channel === c.key
+                  ? "bg-white text-[#3A41C8] shadow-sm"
+                  : "text-[#5A6080] hover:text-[#3A41C8]"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
         </div>
 
-        {snapshot ? (
-          <BrandPanel snapshot={snapshot} onDeleted={() => router.refresh()} />
-        ) : (
-          <div className="bg-white rounded-2xl border border-[#E8EAF0] shadow-sm p-10 text-center text-sm text-[#9BA4C0]">
-            {activeBrand} 재고 데이터가 없습니다. 위에서 재고리스트 엑셀을 업로드하세요.
+        {channel === "finance" ? (
+          <div className="bg-white rounded-2xl border border-[#E8EAF0] shadow-sm p-10 text-center">
+            <p className="text-sm font-bold text-[#5A6080]">금융사 출고 재고는 준비 중입니다.</p>
+            <p className="mt-1.5 text-xs text-[#9BA4C0]">
+              금융사 재고 스크래퍼 연동과 함께 제공될 예정입니다. 대리점 출고 재고는 &quot;대리점 출고&quot; 탭에서 관리하세요.
+            </p>
           </div>
+        ) : (
+          <>
+            <UploadPanel onApplied={(brand) => { setActiveBrand(brand); router.refresh(); }} />
+
+            <div className="flex gap-2">
+              {IMMEDIATE_DELIVERY_BRANDS.map((brand) => {
+                const s = snapshots.find((x) => x.brand === brand);
+                const active = brand === activeBrand;
+                return (
+                  <button
+                    key={brand}
+                    type="button"
+                    onClick={() => setActiveBrand(brand)}
+                    className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                      active
+                        ? "bg-[#6066EE] text-white"
+                        : "bg-white text-[#5A6080] border border-[#E8EAF0] hover:bg-[#EEF0FF]"
+                    }`}
+                  >
+                    {brand}
+                    <span className={`ml-1.5 text-xs ${active ? "text-white/80" : "text-[#9BA4C0]"}`}>
+                      {s ? `${s.vehicleCount.toLocaleString("ko-KR")}대` : "없음"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {snapshot ? (
+              <BrandPanel snapshot={snapshot} onDeleted={() => router.refresh()} />
+            ) : (
+              <div className="bg-white rounded-2xl border border-[#E8EAF0] shadow-sm p-10 text-center text-sm text-[#9BA4C0]">
+                {activeBrand} 재고 데이터가 없습니다. 위에서 재고리스트 엑셀을 업로드하세요.
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
