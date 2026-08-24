@@ -21,10 +21,39 @@ export async function GET(request: NextRequest) {
     const financeCompanyId = sp.get("financeCompanyId");
     const vehicleId = sp.get("vehicleId");
     const productType = sp.get("productType") ?? "장기렌트";
+    const db = prisma;
+
+    // 브랜드 요약 모드 — 차량 칩에 매핑 현황(매핑 m/트림 t)을 표시하기 위한 집계
+    const summaryBrand = sp.get("summaryBrand");
+    if (financeCompanyId && summaryBrand) {
+      const vehiclesOfBrand = await db.vehicle.findMany({
+        where: { brand: summaryBrand },
+        select: { id: true, trims: { where: { lineupId: { not: null } }, select: { id: true } } },
+      });
+      const trimToVehicle = new Map<string, string>();
+      for (const v of vehiclesOfBrand) for (const t of v.trims) trimToVehicle.set(t.id, v.id);
+      const mapped = await db.capitalTrimMapping.findMany({
+        where: { financeCompanyId, productType, trimId: { in: Array.from(trimToVehicle.keys()) } },
+        select: { trimId: true },
+      });
+      const mappedByVehicle = new Map<string, number>();
+      for (const m of mapped) {
+        const vid = trimToVehicle.get(m.trimId);
+        if (vid) mappedByVehicle.set(vid, (mappedByVehicle.get(vid) ?? 0) + 1);
+      }
+      return NextResponse.json({
+        success: true,
+        summary: vehiclesOfBrand.map((v) => ({
+          vehicleId: v.id,
+          total: v.trims.length,
+          mapped: mappedByVehicle.get(v.id) ?? 0,
+        })),
+      });
+    }
+
     if (!financeCompanyId || !vehicleId) {
       return NextResponse.json({ error: "financeCompanyId/vehicleId가 필요합니다." }, { status: 400 });
     }
-    const db = prisma;
 
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: vehicleId },
