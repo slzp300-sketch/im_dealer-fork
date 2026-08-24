@@ -1,4 +1,5 @@
-import { AuthError } from "./types";
+import { AuthError, pushFailure } from "./types";
+import type { CatalogFailure } from "./types";
 import type { AdapterContext, CatalogScrapeOptions, CatalogScrapeResult, ModelListOptions, ModelListResult, SiteAdapter } from "./types";
 import type { CatalogTrimEntry, TrimScrapeResult, TrimMatchConfidence } from "../../../src/types/scraper";
 import { matchTrim, findModelIndex, type CatalogCandidate } from "../../../src/lib/scraper/trim-match";
@@ -227,6 +228,7 @@ export const orixAdapter: SiteAdapter = {
     const lsWork = cfg(config, "lsWorkKubun", "CF100006");
     let total = 0, skipped = 0, failed = 0, trimsDone = 0, trimsTotal = 0;
     const brandSummaries: CatalogScrapeResult["brands"] = [];
+    const failures: CatalogFailure[] = [];
 
     for (let bi = 0; bi < opts.brands.length; bi++) {
       const brand = opts.brands[bi];
@@ -269,7 +271,10 @@ export const orixAdapter: SiteAdapter = {
               await api(ctx, { txGbCd: "CAR_COMBO_3", LS_WORK_KUBUN: lsWork, BRAND_CD: brand.brandCd, DT_MDL_CD: t.__dtMdlCd, PRE_ADC_YN: "N" });
               r = await collectBaseRates(ctx, t, lsWork);
             }
-            if (Object.keys(r.baseRates).length === 0) failed++;
+            if (Object.keys(r.baseRates).length === 0) {
+              failed++;
+              pushFailure(failures, `${String(model.MDL_NM ?? "")} ${String(t.MDEL_NAME2 || t.MDEL_NAME || t.MDEL_CD)}`, r.warnings[0] ?? "월납입금 산출 0건");
+            }
             const entry: CatalogTrimEntry = {
               brandCd: brand.brandCd, brandName: brand.name,
               modelCd: String(model.MDL_CD), modelName: String(model.MDL_NM ?? ""),
@@ -287,6 +292,7 @@ export const orixAdapter: SiteAdapter = {
           } catch (e) {
             failed++;
             log(`[카탈로그] ${t.MDEL_NAME2 ?? t.MDEL_CD} 수집 실패: ${(e as Error).message.slice(0, 60)}`);
+            pushFailure(failures, `${String(model.MDL_NM ?? "")} ${String(t.MDEL_NAME2 ?? t.MDEL_CD)}`, (e as Error).message.slice(0, 60));
           }
           await sleep(reqDelay(config));
         }
@@ -295,7 +301,7 @@ export const orixAdapter: SiteAdapter = {
       }
       brandSummaries.push({ brandCd: brand.brandCd, name: brand.name, trims: brandTrims });
     }
-    return { total, skipped, failed, brands: brandSummaries };
+    return { total, skipped, failed, brands: brandSummaries, failures };
   },
 };
 

@@ -66,11 +66,24 @@ export interface ModelListResult {
   brands: { brandCd: string; name: string; models: number }[];
 }
 
+/** 실패 1건의 표시용 요약 — 완료 카드에서 "무엇이 왜" 실패했는지 보여준다. */
+export interface CatalogFailure {
+  label: string; // 실패 지점 (트림·모델·차종 이름)
+  reason: string; // 짧은 사유 (콘솔 로그와 동일 수준)
+}
+
+/** 실패 내역은 표시용 상한까지만 쌓는다 — draft(JSON 컬럼) 비대 방지. failed 카운트는 별도로 전량 센다. */
+export const MAX_CATALOG_FAILURES = 30;
+export function pushFailure(list: CatalogFailure[], label: string, reason: string) {
+  if (list.length < MAX_CATALOG_FAILURES) list.push({ label, reason: reason.slice(0, 80) });
+}
+
 export interface CatalogScrapeResult {
   total: number; // 수집(저장 시도)한 트림 수
   skipped: number; // 이번주 기수집으로 건너뛴 수
   failed: number; // 월납입금 0건 등 수집 실패 수
   brands: { brandCd: string; name: string; trims: number }[];
+  failures?: CatalogFailure[]; // 실패 내역 (상한 MAX_CATALOG_FAILURES 건)
 }
 
 /**

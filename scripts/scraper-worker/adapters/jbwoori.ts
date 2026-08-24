@@ -1,4 +1,5 @@
-import { AuthError } from "./types";
+import { AuthError, pushFailure } from "./types";
+import type { CatalogFailure } from "./types";
 import type { AdapterContext, CatalogScrapeOptions, CatalogScrapeResult, ModelListOptions, ModelListResult, SiteAdapter } from "./types";
 import type { CatalogTrimEntry, TrimScrapeResult } from "../../../src/types/scraper";
 import { assertHttpUrl } from "../safe-url";
@@ -286,6 +287,7 @@ export const jbwooriAdapter: SiteAdapter = {
     const { log } = ctx;
     let total = 0, skipped = 0, failed = 0, trimsDone = 0, trimsTotal = 0;
     const brandSummaries: CatalogScrapeResult["brands"] = [];
+    const failures: CatalogFailure[] = [];
 
     for (let bi = 0; bi < opts.brands.length; bi++) {
       const brand = opts.brands[bi];
@@ -295,7 +297,11 @@ export const jbwooriAdapter: SiteAdapter = {
       let allClasses: any[];
       try {
         allClasses = rows((await apiPost(ctx, `${RNT}/getVhclClssList.do`, { chnlGdsDvcd: "T", makrCd: brand.brandCd, dmdmImrtDvcd: "1", straBuynKncrYn: "", credRelfCmdtYn: "" }))?.vhclClssList).filter((c) => c.makrSeqno);
-      } catch (e) { failed++; log(`[카탈로그] 브랜드 ${brand.name} 클래스 로드 실패: ${(e as Error).message.slice(0, 50)}`); brandSummaries.push({ brandCd: brand.brandCd, name: brand.name, trims: 0 }); continue; }
+      } catch (e) {
+        failed++; log(`[카탈로그] 브랜드 ${brand.name} 클래스 로드 실패: ${(e as Error).message.slice(0, 50)}`);
+        pushFailure(failures, `브랜드 ${brand.name}`, `모델 목록 로드 실패: ${(e as Error).message.slice(0, 50)}`);
+        brandSummaries.push({ brandCd: brand.brandCd, name: brand.name, trims: 0 }); continue;
+      }
       const classes = pickModels(allClasses, brand.modelCds, (c) => String(c.makrSeqno));
       log(`[카탈로그] 브랜드 ${brand.name}(${brand.brandCd}) — 모델 ${classes.length}개${brand.modelCds?.length ? ` (차량 선택 수집 / 전체 ${allClasses.length}개)` : ""}`);
       let brandTrims = 0;
@@ -308,7 +314,10 @@ export const jbwooriAdapter: SiteAdapter = {
         let subModels: any[];
         try {
           subModels = rows((await apiPost(ctx, `${RNT}/getVhclKncrLis.do`, { chnlGdsDvcd: "T", dmdmImrtDvcd: "1", makrCd: brand.brandCd, makrSeqno: String(cls.makrSeqno), straBuynKncrYn: "", credRelfCmdtYn: "" }))?.vhclKncrLis).filter((m) => m.cmdtCd);
-        } catch (e) { failed++; log(`[카탈로그] 모델 ${modelName} 차종 로드 실패: ${(e as Error).message.slice(0, 50)}`); continue; }
+        } catch (e) {
+          failed++; log(`[카탈로그] 모델 ${modelName} 차종 로드 실패: ${(e as Error).message.slice(0, 50)}`);
+          pushFailure(failures, `${brand.name} ${modelName}`, `차종 목록 로드 실패: ${(e as Error).message.slice(0, 50)}`); continue;
+        }
         opts.onProgress({ phase: "scraping", brandIdx: bi + 1, brandCount: opts.brands.length, brandName: brand.name, modelIdx: ci + 1, modelCount: classes.length, modelName, trimsDone, trimsTotal, skipped, updatedAt: new Date().toISOString() });
 
         for (const sub of subModels) {
@@ -317,7 +326,10 @@ export const jbwooriAdapter: SiteAdapter = {
           let trims: any[];
           try {
             trims = rows((await apiPost(ctx, `${RNT}/getVhclDtlList.do`, { chnlGdsDvcd: "T", cmdtCd: String(sub.cmdtCd), straBuynKncrYn: "", credRelfCmdtYn: "" }))?.vhclDtlList).filter((t) => t.cmdtDtlsCd);
-          } catch (e) { failed++; log(`[카탈로그] 차종 ${subName} 트림 로드 실패: ${(e as Error).message.slice(0, 50)}`); continue; }
+          } catch (e) {
+            failed++; log(`[카탈로그] 차종 ${subName} 트림 로드 실패: ${(e as Error).message.slice(0, 50)}`);
+            pushFailure(failures, `${modelName} ${subName}`, `트림 목록 로드 실패: ${(e as Error).message.slice(0, 50)}`); continue;
+          }
           trimsTotal += trims.length;
           log(`[카탈로그] ${brand.name} ${modelName} ${subName} — 트림 ${trims.length}개`);
 
@@ -330,7 +342,10 @@ export const jbwooriAdapter: SiteAdapter = {
             const modelYear = yearOf(subName);
             try {
               const r = await collectTrim(ctx, t, modelName);
-              if (Object.keys(r.baseRates).length === 0) failed++;
+              if (Object.keys(r.baseRates).length === 0) {
+                failed++;
+                pushFailure(failures, `${modelName} ${t.cmdtDtlsNm}`, r.warnings[0] ?? "월납입금 산출 0건");
+              }
               const entry: CatalogTrimEntry = {
                 brandCd: brand.brandCd, brandName: brand.name,
                 modelCd: String(cls.makrSeqno), modelName,
@@ -343,6 +358,7 @@ export const jbwooriAdapter: SiteAdapter = {
               total++; brandTrims++;
             } catch (e) {
               failed++; log(`[카탈로그] ${t.cmdtDtlsNm} 수집 실패: ${(e as Error).message.slice(0, 60)}`);
+              pushFailure(failures, `${modelName} ${t.cmdtDtlsNm}`, (e as Error).message.slice(0, 60));
             }
             await sleep(reqDelay(ctx.config));
           }
@@ -352,6 +368,6 @@ export const jbwooriAdapter: SiteAdapter = {
       }
       brandSummaries.push({ brandCd: brand.brandCd, name: brand.name, trims: brandTrims });
     }
-    return { total, skipped, failed, brands: brandSummaries };
+    return { total, skipped, failed, brands: brandSummaries, failures };
   },
 };

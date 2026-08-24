@@ -1,4 +1,5 @@
-import { AuthError } from "./types";
+import { AuthError, pushFailure } from "./types";
+import type { CatalogFailure } from "./types";
 import type { AdapterContext, CatalogScrapeOptions, CatalogScrapeResult, ModelListOptions, ModelListResult, SiteAdapter } from "./types";
 import type { CatalogTrimEntry, TrimScrapeResult } from "../../../src/types/scraper";
 import { assertHttpUrl } from "../safe-url";
@@ -231,6 +232,7 @@ export const shinhanAdapter: SiteAdapter = {
     const { log } = ctx;
     let total = 0, skipped = 0, failed = 0, trimsDone = 0, trimsTotal = 0;
     const brandSummaries: CatalogScrapeResult["brands"] = [];
+    const failures: CatalogFailure[] = [];
 
     for (let bi = 0; bi < opts.brands.length; bi++) {
       const brand = opts.brands[bi];
@@ -247,7 +249,10 @@ export const shinhanAdapter: SiteAdapter = {
         let lineups: any[];
         try {
           lineups = zip((await P01(ctx, { selectType: "carLineUp", dnwaCarBrdId: brand.brandCd, dnwaCarMdlId: model.dnwaCarMdlId, dnwaCarBrdNm: brand.name, dnwaCarMdlNm: modelName }))?.carDtlSearchList);
-        } catch (e) { failed++; log(`[카탈로그] 모델 ${modelName} 로드 실패: ${(e as Error).message.slice(0, 50)}`); continue; }
+        } catch (e) {
+          failed++; log(`[카탈로그] 모델 ${modelName} 로드 실패: ${(e as Error).message.slice(0, 50)}`);
+          pushFailure(failures, `${brand.name} ${modelName}`, `모델 정보 로드 실패: ${(e as Error).message.slice(0, 50)}`); continue;
+        }
 
         // 트림 목록 (세부모델별)
         const trimRows: { lineup: any; trim: any }[] = [];
@@ -273,7 +278,10 @@ export const shinhanAdapter: SiteAdapter = {
           const modelYear = yearOf(String(lineup.dnwaCarYdtVl ?? lineupName));
           try {
             const r = await collectTrim(ctx, { carMdlCd, brdId: brand.brandCd, mdlId: String(model.dnwaCarMdlId), dlMdlId: String(lineup.dnwaCarDlMdlId), trimId: String(trim.dnwaCarTrimId), exhQty: String(trim.dnwaCarTrimExhQtyVl ?? ""), price, fuel: String(trim.dnwaCarOokCcdNm ?? ""), brandName: brand.name, modelName, dlMdlName: lineupName, trimName: String(trim.dnwaCarTrimNm ?? "") });
-            if (Object.keys(r.baseRates).length === 0) failed++;
+            if (Object.keys(r.baseRates).length === 0) {
+              failed++;
+              pushFailure(failures, `${modelName} ${trimLabel}`, r.warnings[0] ?? "월납입금 산출 0건");
+            }
             const entry: CatalogTrimEntry = {
               brandCd: brand.brandCd, brandName: brand.name,
               modelCd: String(model.dnwaCarMdlId), modelName,
@@ -287,6 +295,7 @@ export const shinhanAdapter: SiteAdapter = {
             total++; brandTrims++;
           } catch (e) {
             failed++; log(`[카탈로그] ${trimLabel} 수집 실패: ${(e as Error).message.slice(0, 60)}`);
+            pushFailure(failures, `${modelName} ${trimLabel}`, (e as Error).message.slice(0, 60));
           }
           await sleep(reqDelay(ctx.config));
         }
@@ -295,6 +304,6 @@ export const shinhanAdapter: SiteAdapter = {
       }
       brandSummaries.push({ brandCd: brand.brandCd, name: brand.name, trims: brandTrims });
     }
-    return { total, skipped, failed, brands: brandSummaries };
+    return { total, skipped, failed, brands: brandSummaries, failures };
   },
 };

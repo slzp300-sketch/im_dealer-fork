@@ -484,6 +484,21 @@ export default function CatalogScrapePanel({ financeCompanyId, financeCompanyNam
                   ))}
                 </div>
               )}
+              {/* 실패 내역 — 무엇이 왜 실패했는지 (어댑터가 상한 30건까지 동봉, 구버전 워커 결과엔 없음) */}
+              {(job.summary.failures?.length ?? 0) > 0 && (
+                <div className="mt-2 rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 space-y-0.5">
+                  <p className="text-[11px] font-semibold text-red-600">실패 내역</p>
+                  {job.summary.failures!.map((f, i) => (
+                    <p key={i} className="text-[11px] text-red-600">
+                      <span className="font-semibold">{f.label}</span>
+                      <span className="text-red-400"> — {f.reason}</span>
+                    </p>
+                  ))}
+                  {job.summary.failed > job.summary.failures!.length && (
+                    <p className="text-[11px] text-red-400">외 {job.summary.failed - job.summary.failures!.length}건 — 워커 콘솔 로그 참고</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

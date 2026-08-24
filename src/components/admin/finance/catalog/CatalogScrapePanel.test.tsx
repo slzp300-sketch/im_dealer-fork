@@ -152,6 +152,41 @@ describe("CatalogScrapePanel", () => {
     expect(screen.getByRole("button", { name: /카니발.*미수집/ }).className).toContain("bg-red-50");
   });
 
+  it("완료 카드에 실패 내역(무엇이 왜)을 표시한다", () => {
+    const job: CatalogJobState = {
+      jobId: "job-1", jobType: "catalog", status: "completed", progress: null, error: null, humanPrompt: null,
+      summary: {
+        mode: "catalog", total: 11, skipped: 0, failed: 5,
+        brands: [{ brandCd: "HYUNDAI", name: "현대", trims: 11 }],
+        models: [{ brandName: "현대", modelName: "더 뉴 스타리아", trims: 11 }],
+        failures: [
+          { label: "더 뉴 스타리아 라운지 9인승", reason: "잔존율 조회 실패(세션 차단)" },
+          { label: "더 뉴 스타리아 카고 3인승", reason: "월납입금 산출 0건" },
+        ],
+        finishedAt: new Date().toISOString(),
+      },
+    };
+    render(<CatalogScrapePanel {...BASE_PROPS} job={job} />);
+    expect(screen.getByText("실패 내역")).toBeTruthy();
+    expect(screen.getByText("더 뉴 스타리아 라운지 9인승")).toBeTruthy();
+    expect(screen.getByText(/잔존율 조회 실패/)).toBeTruthy();
+    // failed(5) > 동봉된 내역(2) — 상한 초과분 안내
+    expect(screen.getByText(/외 3건/)).toBeTruthy();
+  });
+
+  it("구버전 워커 결과(failures 없음)면 실패 내역 블록을 숨긴다", () => {
+    const job: CatalogJobState = {
+      jobId: "job-1", jobType: "catalog", status: "completed", progress: null, error: null, humanPrompt: null,
+      summary: {
+        mode: "catalog", total: 11, skipped: 0, failed: 5,
+        brands: [{ brandCd: "HYUNDAI", name: "현대", trims: 11 }],
+        finishedAt: new Date().toISOString(),
+      },
+    };
+    render(<CatalogScrapePanel {...BASE_PROPS} job={job} />);
+    expect(screen.queryByText("실패 내역")).toBeNull();
+  });
+
   it("검색으로 차량을 좁힌다", async () => {
     render(<CatalogScrapePanel {...BASE_PROPS} />);
     await openKia();
