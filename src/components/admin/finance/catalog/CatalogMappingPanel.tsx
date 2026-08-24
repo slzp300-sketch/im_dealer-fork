@@ -6,6 +6,7 @@ interface VehicleLite {
   id: string;
   brand: string;
   name: string;
+  isVisible?: boolean;
 }
 interface Props {
   financeCompanyId: string;
@@ -87,18 +88,20 @@ export default function CatalogMappingPanel({ financeCompanyId, productType, veh
   const [applyResult, setApplyResult] = useState<string | null>(null);
   const [applyDetails, setApplyDetails] = useState<TrimStatus[]>([]);
 
-  const vehicleById = useMemo(() => new Map(vehicles.map((v) => [v.id, v] as const)), [vehicles]);
+  // 사이트에서 미노출인 차량은 매핑 대상에서 제외 — 최신 연식만 남아 화면이 깔끔해진다 (8/21 회의 결정)
+  const visibleVehicles = useMemo(() => vehicles.filter((v) => v.isVisible !== false), [vehicles]);
+  const vehicleById = useMemo(() => new Map(visibleVehicles.map((v) => [v.id, v] as const)), [visibleVehicles]);
   const brands = useMemo(
-    () => Array.from(new Set(vehicles.map((v) => v.brand))).sort((a, b) => a.localeCompare(b, "ko")),
-    [vehicles]
+    () => Array.from(new Set(visibleVehicles.map((v) => v.brand))).sort((a, b) => a.localeCompare(b, "ko")),
+    [visibleVehicles]
   );
   const brandVehicles = useMemo(() => {
     const q = vehicleQuery.trim().toLowerCase();
-    return vehicles
+    return visibleVehicles
       .filter((v) => v.brand === brand)
       .filter((v) => !q || v.name.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  }, [vehicles, brand, vehicleQuery]);
+  }, [visibleVehicles, brand, vehicleQuery]);
   const selectedVehicles = useMemo(
     () => selectedIds.map((id) => vehicleById.get(id)).filter((v): v is VehicleLite => !!v),
     [selectedIds, vehicleById]

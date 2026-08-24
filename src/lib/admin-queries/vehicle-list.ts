@@ -6,7 +6,7 @@ import { prisma } from "../prisma";
 
 export async function getAdminVehiclesLite(): Promise<AdminVehicleLite[]> {
   return prisma.vehicle.findMany({
-    select: { id: true, brand: true, name: true },
+    select: { id: true, brand: true, name: true, isVisible: true },
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
   });
 }
