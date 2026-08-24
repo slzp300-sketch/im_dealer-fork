@@ -62,7 +62,7 @@ export function HeroSectionV2({ featuredVehicle }: HeroSectionV2Props) {
                 alt=""
                 width={750}
                 height={375}
-                className="pointer-events-none absolute right-0 top-1/2 h-full w-auto -translate-y-1/2 select-none transition-transform duration-500 group-hover:scale-[1.02] [mask-image:linear-gradient(to_right,transparent,black_20%),linear-gradient(to_bottom,black,black)] [mask-composite:intersect] max-sm:top-auto max-sm:bottom-0 max-sm:translate-y-0 max-sm:[mask-image:linear-gradient(to_right,transparent,black_34%),linear-gradient(to_bottom,black,black)]"
+                className="pointer-events-none absolute right-0 top-1/2 h-full w-auto -translate-y-1/2 select-none transition-transform duration-500 group-hover:scale-[1.02] [mask-image:linear-gradient(to_right,transparent,black_20%),linear-gradient(to_bottom,black,black)] [mask-composite:intersect] max-sm:top-auto max-sm:bottom-0 max-sm:translate-x-3 max-sm:translate-y-0 max-sm:[mask-image:linear-gradient(to_right,transparent,black_34%),linear-gradient(to_bottom,black,black)]"
               />
               {/* 텍스트 가독성 스크림 — 모바일에서 차량과 카피 겹침 대비 */}
               <div
@@ -71,7 +71,7 @@ export function HeroSectionV2({ featuredVehicle }: HeroSectionV2Props) {
               />
 
               {/* 카피 */}
-              <div className="relative z-10 px-5 py-6 max-[340px]:px-4 max-[340px]:py-5 md:px-7 md:py-7">
+              <div className="relative z-10 px-5 py-10 max-[340px]:px-4 max-[340px]:py-8 md:px-7 md:py-12">
                 <p className="text-[18px] font-extrabold leading-[1.32] tracking-[-0.02em] text-white max-[340px]:text-[16px] md:text-[21px]">
                   오픈 한정 <span className="text-[#3D6BFF]">NO</span> 마진!
                   <br />
