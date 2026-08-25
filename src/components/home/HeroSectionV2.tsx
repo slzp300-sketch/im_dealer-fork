@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, ChevronRight } from "lucide-react";
+import { AiBadgeIcon } from "@/components/ui/AiBadgeIcon";
 import type { VehicleListItem } from "@/types/api";
 import { RepresentativeQuotePrice } from "@/components/cars/RepresentativeQuotePrice";
 import { isSupabaseStorageUrl } from "@/lib/image-url";
@@ -39,9 +40,10 @@ export function HeroSectionV2({ featuredVehicle }: HeroSectionV2Props) {
               </Link>
               <Link
                 href="/cars"
-                className="flex h-[56px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-[14px] bg-[#EEF1F6] px-3 text-[16px] font-bold text-text-strong ring-[1.5px] ring-brand/35 transition-all hover:bg-[#E5E9F2] hover:ring-brand/55 active:scale-[0.99] max-[340px]:text-[14px] sm:w-[180px] sm:flex-none md:text-[17px]"
+                className="cta-ai flex h-[56px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-[14px] px-3 text-[16px] active:scale-[0.99] max-[340px]:text-[14px] sm:w-[180px] sm:flex-none md:text-[17px]"
               >
-                내 차량 견적내기
+                <AiBadgeIcon className="h-[18px] w-auto shrink-0" />
+                셀프 견적내기
               </Link>
             </div>
 

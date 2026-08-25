@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Calculator, Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
+import { AiBadgeIcon } from "@/components/ui/AiBadgeIcon";
 import { RepresentativeQuotePrice } from "@/components/cars/RepresentativeQuotePrice";
 import { STACK_OFFSET_EXPANDED } from "@/components/layout/dock";
 import { ChannelTalkButton } from "@/components/quote/ChannelTalkButton";
@@ -48,10 +49,10 @@ export function MobileQuoteSummary({
         </div>
         <Link
           href={`/quote?vehicle=${vehicleSlug}`}
-          className="mt-3 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-btn bg-brand px-5 text-[15px] font-extrabold text-white transition-colors duration-150 hover:bg-brand-pressed"
+          className="cta-ai mt-3 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-btn px-5 text-[15px]"
         >
-          <Calculator size={17} strokeWidth={2.3} />
-          견적 내기
+          <AiBadgeIcon className="h-[17px] w-auto shrink-0" />
+          셀프 견적내기
         </Link>
       </div>
       <MobileStickyQuoteBar vehicleName={vehicleName} vehicleSlug={vehicleSlug} quotes={quotes} />
@@ -63,7 +64,7 @@ const consultBtnClass =
   "h-14 max-w-full shrink-0 gap-1.5 rounded-full border border-line bg-surface/95 px-5 text-[15px] font-extrabold text-ink shadow-[0_2px_12px_rgb(var(--color-text-strong-rgb)/0.08)] backdrop-blur-md hover:bg-surface-muted hover:opacity-100";
 
 const quoteBtnClass =
-  "inline-flex h-14 max-w-full shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand px-5 text-[15px] font-extrabold text-white shadow-[0_2px_12px_rgb(var(--color-text-strong-rgb)/0.12)] transition-colors duration-150 hover:bg-brand-pressed";
+  "cta-ai inline-flex h-14 max-w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[15px]";
 
 function MobileStickyQuoteBar({
   vehicleName,
@@ -75,8 +76,6 @@ function MobileStickyQuoteBar({
 }) {
   const prefersReducedMotion = useReducedMotion();
   const [hasScrolledPastSummary, setHasScrolledPastSummary] = useState(false);
-  /** BottomNav 축소 여부 — 펼침일 때 CTA를 우측 정렬 */
-  const [navCollapsed, setNavCollapsed] = useState(false);
   const showStickyDock = hasScrolledPastSummary;
 
   useEffect(() => {
@@ -112,22 +111,10 @@ function MobileStickyQuoteBar({
     };
   }, []);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    const syncNavCollapsed = () => {
-      // dataset 없으면 펼침(기본 메뉴바)으로 본다
-      setNavCollapsed(root.dataset.bottomNavCollapsed === "true");
-    };
-    syncNavCollapsed();
-    const observer = new MutationObserver(syncNavCollapsed);
-    observer.observe(root, { attributes: true, attributeFilter: ["data-bottom-nav-collapsed"] });
-    return () => observer.disconnect();
-  }, []);
-
   const quoteLink = (
     <Link href={`/quote?vehicle=${vehicleSlug}`} className={quoteBtnClass}>
-      <Calculator size={17} strokeWidth={2.3} />
-      견적 내기
+      <AiBadgeIcon className="h-[17px] w-auto shrink-0" />
+      셀프 견적내기
     </Link>
   );
 
@@ -147,7 +134,7 @@ function MobileStickyQuoteBar({
           key="mobile-sticky-quote-dock"
           className="mobile-sticky-quote-dock pointer-events-none fixed left-0 right-0 z-[60] px-3 lg:hidden"
           style={{
-            // 축소: 중앙 FAB과 같은 바닥선 / 펼침: 메뉴바 위로 상승
+            // 메뉴바/FAB 위쪽 고정
             bottom:
               `calc(var(--bottom-nav-stack-offset, ${STACK_OFFSET_EXPANDED}) + env(safe-area-inset-bottom, 0px))`,
           }}
@@ -156,20 +143,11 @@ function MobileStickyQuoteBar({
           exit={prefersReducedMotion ? { opacity: 0, y: 0 } : { opacity: 0, y: 8 }}
           transition={{ duration: prefersReducedMotion ? 0 : 0.18, ease: "easeOut" }}
         >
-          {navCollapsed ? (
-            /* 축소: 점 기준 왼쪽 상담 · 오른쪽 견적 */
-            <div className="mx-auto grid max-w-[480px] grid-cols-[1fr_4rem_1fr] items-center gap-2">
-              <div className="pointer-events-auto flex min-w-0 justify-end">{consultButton}</div>
-              <div className="pointer-events-none h-16 w-16 shrink-0" aria-hidden />
-              <div className="pointer-events-auto flex min-w-0 justify-start">{quoteLink}</div>
-            </div>
-          ) : (
-            /* 펼침: 상담 + 견적 모두 우측 정렬, 메뉴바와 가깝게 */
-            <div className="pointer-events-auto mx-auto flex max-w-[480px] items-center justify-end gap-2.5">
-              {consultButton}
-              {quoteLink}
-            </div>
-          )}
+          {/* 상담 + 견적 우측 정렬, 네비/FAB 위 */}
+          <div className="pointer-events-auto mx-auto flex max-w-[480px] items-center justify-end gap-2.5">
+            {consultButton}
+            {quoteLink}
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
@@ -215,10 +193,10 @@ export function CarDetailSidebar({
             <>
               <Link
                 href={`/quote?vehicle=${vehicleSlug}`}
-                className="cta mb-2.5 hover:bg-brand-pressed"
+                className="cta cta-ai mb-2.5"
               >
-                <Calculator size={16} strokeWidth={2} />
-                견적 내기
+                <AiBadgeIcon className="h-4 w-auto shrink-0" />
+                셀프 견적내기
               </Link>
               <ChannelTalkButton vehicleName={vehicleName} label="상담하기" size="md" />
             </>
@@ -226,10 +204,10 @@ export function CarDetailSidebar({
             <>
               <Link
                 href={`/quote?vehicle=${vehicleSlug}`}
-                className="cta mb-2.5 hover:bg-brand-pressed"
+                className="cta cta-ai mb-2.5"
               >
-                <Calculator size={16} strokeWidth={2} />
-                견적 내기
+                <AiBadgeIcon className="h-4 w-auto shrink-0" />
+                셀프 견적내기
               </Link>
               <p className="rounded-[12px] bg-surface-soft px-3 py-2 text-center text-[12px] leading-relaxed text-ink-label">
                 조건 선택 후 상담 필요 여부를 안내해드려요

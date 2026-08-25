@@ -117,7 +117,7 @@ describe("MobileQuoteSummary sticky dock", () => {
     fireEvent.click(consultButtons[consultButtons.length - 1]);
     expect(mocks.openChannelTalk).toHaveBeenCalledTimes(1);
 
-    const quoteLinks = screen.getAllByRole("link", { name: /견적 내기/ });
+    const quoteLinks = screen.getAllByRole("link", { name: /AI 셀프 견적내기/ });
     const stickyQuote = quoteLinks[quoteLinks.length - 1];
     expect(stickyQuote).toHaveAttribute("href", "/quote?vehicle=sorento");
     expect(stickyQuote.parentElement?.className).toContain("pointer-events-auto");

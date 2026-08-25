@@ -67,6 +67,6 @@ describe("FeaturedCarsSlider 반응형 카드", () => {
       "lg:text-[24px]",
       "xl:text-[26px]",
     );
-    expect(screen.queryByRole("link", { name: "견적 내기" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "AI 셀프 견적내기" })).not.toBeInTheDocument();
   });
 });

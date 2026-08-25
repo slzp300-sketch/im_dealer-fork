@@ -2,8 +2,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BottomNav } from "./BottomNav";
 import {
-  DOCK_BOTTOM_GAP,
   DOCK_BOTTOM_PADDING_CLASS,
+  STACK_OFFSET_COLLAPSED,
   STACK_OFFSET_EXPANDED,
 } from "./dock";
 
@@ -106,7 +106,7 @@ describe("BottomNav scroll collapse", () => {
     );
   });
 
-  it("스크롤을 내리면 점(FAB)으로 축소되고 스택 오프셋을 줄인다", () => {
+  it("스크롤을 내리면 점(FAB)으로 축소된다", () => {
     render(<BottomNav />);
 
     act(() => {
@@ -121,7 +121,7 @@ describe("BottomNav scroll collapse", () => {
     expect(screen.getByRole("button", { name: "메뉴 열기" })).toBeInTheDocument();
     expect(screen.queryByLabelText("홈")).not.toBeInTheDocument();
     expect(document.documentElement.style.getPropertyValue("--bottom-nav-stack-offset")).toBe(
-      DOCK_BOTTOM_GAP,
+      STACK_OFFSET_COLLAPSED,
     );
   });
 

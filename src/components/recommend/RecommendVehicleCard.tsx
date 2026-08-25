@@ -8,6 +8,7 @@ import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 import type { RecommendedVehicle } from "@/types/recommendation";
 import { AiInsight } from "@/components/quote/AiInsight";
 import { ChannelTalkButton } from "@/components/quote/ChannelTalkButton";
+import { AiBadgeIcon } from "@/components/ui/AiBadgeIcon";
 import { TossPrice } from "@/components/ui/TossPrice";
 import { ChevronRight, Trophy, Check, Users } from "lucide-react";
 import { industryToCustomerType } from "@/constants/customer-types";
@@ -334,15 +335,16 @@ export function RecommendVehicleCard({ vehicle, isTop = false, industry }: Recom
           </p>
         </div>
 
-        {/* 하단 버튼 — 견적내기(메인) / 상담하기(보조) */}
+        {/* 하단 버튼 — AI셀프 견적내기(메인) / 상담하기(보조) */}
         <div className="space-y-2">
-          {/* 견적내기 — 메인 강조 */}
+          {/* AI셀프 견적내기 — 메인 강조 */}
           <button
             type="button"
             onClick={handleQuote}
-            className="public-touch-button w-full bg-brand text-white font-extrabold shadow-lift hover:bg-brand-dark"
+            className="cta-ai public-touch-button w-full"
           >
-            월 납입금 확인하기
+            <AiBadgeIcon className="h-[16px] w-auto shrink-0" />
+            셀프 견적내기
           </button>
 
           {/* 상담하기 — 보조 (테두리) */}

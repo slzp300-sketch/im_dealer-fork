@@ -12,7 +12,7 @@ describe("HeroSectionV2", () => {
       name: "AI 추천 받기",
     });
     const browseCarsLink = screen.getByRole("link", {
-      name: "내 차량 견적내기",
+      name: "AI 셀프 견적내기",
     });
 
     // Then
@@ -20,7 +20,7 @@ describe("HeroSectionV2", () => {
       aiRecommendationLink.compareDocumentPosition(browseCarsLink),
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(aiRecommendationLink).toHaveClass("bg-brand", "text-white");
-    expect(browseCarsLink).not.toHaveClass("bg-brand", "text-white");
-    expect(browseCarsLink).toHaveClass("bg-[#EEF1F6]", "ring-brand/35");
+    expect(browseCarsLink).not.toHaveClass("bg-brand");
+    expect(browseCarsLink).toHaveClass("cta-ai");
   });
 });

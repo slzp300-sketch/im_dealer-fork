@@ -14,8 +14,8 @@ export const DOCK_BOTTOM_PADDING_CLASS =
 /** 메뉴바(64) + 바닥 여백(28) + CTA 간격(8) */
 export const STACK_OFFSET_EXPANDED = "100px";
 
-/** FAB과 동일 바닥선 */
-export const STACK_OFFSET_COLLAPSED = DOCK_BOTTOM_GAP;
+/** 축소 FAB 위쪽 — 펼침 메뉴바와 동일하게 독을 항상 네비/FAB 위에 올린다 */
+export const STACK_OFFSET_COLLAPSED = "100px";
 
 /**
  * 펼친 메뉴바가 푸터를 가리지 않게.

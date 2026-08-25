@@ -407,6 +407,16 @@
   .cta:disabled { @apply opacity-40 cursor-not-allowed; }
   .cta-gho    { @apply bg-sec text-ink; }
 
+  /* AI 셀프 견적 CTA — 이벤트 오렌지 */
+  .cta-ai {
+    @apply text-white font-extrabold;
+    background-image: linear-gradient(135deg, #ff7a45 0%, #ff5a2e 55%, #f0491d 100%);
+    box-shadow: 0 6px 18px rgb(255 90 46 / 0.28);
+    transition: filter 150ms ease, box-shadow 150ms ease;
+  }
+  .cta-ai:hover { filter: brightness(1.06); box-shadow: 0 8px 22px rgb(255 90 46 / 0.38); }
+  .cta-ai:active { filter: brightness(0.95); }
+
   /* 하단 고정 CTA 도크 */
   .dock { @apply sticky bottom-0 px-[18px] pt-[10px] pb-[calc(28px+env(safe-area-inset-bottom,0px))] border-t border-line bg-surface; }
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CarFront, Sparkles, ArrowRight } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { AiBadgeIcon } from "@/components/ui/AiBadgeIcon";
 import { ActiveQuoteSection } from "@/components/mypage/ActiveQuoteSection";
 import { QuoteCard } from "@/components/mypage/QuoteCard";
 import { getMyPageData } from "@/lib/member-queries/mypage";
@@ -51,9 +52,10 @@ export default async function MyQuotesPage() {
               </p>
               <Link
                 href="/cars"
-                className="mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-btn bg-brand px-4 text-[13px] font-extrabold text-white transition-colors hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                className="cta-ai mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-btn px-4 text-[13px] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
-                내 차량 견적내기
+                <AiBadgeIcon className="h-[14px] w-auto shrink-0" />
+                셀프 견적내기
                 <ArrowRight size={15} strokeWidth={2.4} />
               </Link>
             </div>
