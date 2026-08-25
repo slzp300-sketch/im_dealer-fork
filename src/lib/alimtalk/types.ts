@@ -1,13 +1,21 @@
 // 앱 ↔ 릴레이(scripts/biztalk-relay) 사이의 계약.
 // 릴레이가 이 파일을 직접 import 하므로 Next.js 전용 코드를 넣지 않는다.
 
-/** 알림톡 버튼. 비즈톡 attach.button[] 스펙 중 우리가 쓰는 웹링크(WL)만. */
-export interface AlimtalkButton {
+/** 알림톡 버튼. 비즈톡 attach.button[] 스펙 중 우리가 쓰는 웹링크(WL)·채널추가(AC)만. */
+export interface AlimtalkWebLinkButton {
   name: string;
   type: "WL";
   url_mobile: string;
   url_pc: string;
 }
+
+/** 채널 추가형 템플릿의 첫 버튼. 카카오가 이름을 "채널 추가"로 고정한다. */
+export interface AlimtalkChannelAddButton {
+  name: "채널 추가";
+  type: "AC";
+}
+
+export type AlimtalkButton = AlimtalkWebLinkButton | AlimtalkChannelAddButton;
 
 /** 클레임 응답 — 릴레이가 sendAlimTalk 에 그대로 실어 보낼 수 있는 형태. */
 export interface AlimtalkClaimedMessage {
