@@ -146,7 +146,7 @@ async function collectTrim(ctx: AdapterContext, base: TrimBase, opts?: { skipDep
       return { pay, ruvRt, warn: pay > 0 ? null : `${c.month}/${c.dist} 산출 0` };
     } catch (e) {
       // 견적불가 셀(잔존율 데이터 없음 등)은 건너뛰고 나머지 칸 계속 — 트림 전체를 죽이지 않음
-      return { pay: 0, ruvRt: undefined as number | undefined, warn: `${c.month}/${c.dist}: ${(e as Error).message.slice(0, 30)}` };
+      return { pay: 0, ruvRt: undefined as number | undefined, warn: `${c.month}/${c.dist}: ${(e as Error).message.slice(0, 80)}` };
     }
   });
   RATE_CELLS.forEach((c, i) => {
