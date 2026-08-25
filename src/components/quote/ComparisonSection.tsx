@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { GitCompare, ChevronDown, HelpCircle, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pickDefaultColor } from "@/lib/default-color";
 import { productTypeLabel } from "@/constants/product-type";
 import {
   VehicleConfigPanel,
@@ -440,8 +441,8 @@ export function ComparisonSection({
         if (aborted || !json?.success || !Array.isArray(json.data)) return;
         const list: VehicleColorPublic[] = json.data;
         setP1Colors(list);
-        const defExt = list.find((c) => c.kind === "EXTERIOR" && c.isDefault) ?? list.find((c) => c.kind === "EXTERIOR");
-        const defInt = list.find((c) => c.kind === "INTERIOR" && c.isDefault) ?? list.find((c) => c.kind === "INTERIOR");
+        const defExt = pickDefaultColor(list, "EXTERIOR");
+        const defInt = pickDefaultColor(list, "INTERIOR");
         setP1ExtColor(defExt?.id ?? null);
         setP1IntColor(defInt?.id ?? null);
       })
@@ -504,8 +505,8 @@ export function ComparisonSection({
         if (colorJson?.success && Array.isArray(colorJson.data)) {
           const list: VehicleColorPublic[] = colorJson.data;
           setP2Colors(list);
-          const defExt = list.find((c) => c.kind === "EXTERIOR" && c.isDefault) ?? list.find((c) => c.kind === "EXTERIOR");
-          const defInt = list.find((c) => c.kind === "INTERIOR" && c.isDefault) ?? list.find((c) => c.kind === "INTERIOR");
+          const defExt = pickDefaultColor(list, "EXTERIOR");
+          const defInt = pickDefaultColor(list, "INTERIOR");
           // 세션 저장본의 색상이 유효하면 복원, 아니면 기본 색상
           const restoredExt = restore?.extColor && list.some((c) => c.id === restore.extColor)
             ? restore.extColor : null;

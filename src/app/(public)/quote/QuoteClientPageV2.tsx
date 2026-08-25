@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { DOCK_BOTTOM_PADDING_CLASS } from "@/components/layout/dock";
 import { isSupabaseStorageUrl } from "@/lib/image-url";
 import { sortLineups } from "@/lib/lineup-sort";
+import { pickDefaultColor } from "@/lib/default-color";
 import { productTypeLabel } from "@/constants/product-type";
 import { TossPrice } from "@/components/ui/TossPrice";
 import { ChannelTalkButton } from "@/components/quote/ChannelTalkButton";
@@ -453,8 +454,8 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
         }
         const list: VehicleColorPublic[] = json.data;
         setColors(list);
-        const defaultExt = list.find((c) => c.kind === "EXTERIOR" && c.isDefault) ?? list.find((c) => c.kind === "EXTERIOR");
-        const defaultInt = list.find((c) => c.kind === "INTERIOR" && c.isDefault) ?? list.find((c) => c.kind === "INTERIOR");
+        const defaultExt = pickDefaultColor(list, "EXTERIOR");
+        const defaultInt = pickDefaultColor(list, "INTERIOR");
         const restore = restoreRef.current;
         const restoreExt = restore ? list.find((c) => c.id === restore.exteriorColorId) : undefined;
         const restoreInt = restore ? list.find((c) => c.id === restore.interiorColorId) : undefined;
@@ -556,8 +557,8 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
         }
         const list: VehicleColorPublic[] = json.data;
         setColors(list);
-        const defaultExt = list.find((c) => c.kind === "EXTERIOR" && c.isDefault) ?? list.find((c) => c.kind === "EXTERIOR");
-        const defaultInt = list.find((c) => c.kind === "INTERIOR" && c.isDefault) ?? list.find((c) => c.kind === "INTERIOR");
+        const defaultExt = pickDefaultColor(list, "EXTERIOR");
+        const defaultInt = pickDefaultColor(list, "INTERIOR");
         const restore = restoreRef.current;
         const restoreExt = restore ? list.find((c) => c.id === restore.exteriorColorId) : undefined;
         const restoreInt = restore ? list.find((c) => c.id === restore.interiorColorId) : undefined;

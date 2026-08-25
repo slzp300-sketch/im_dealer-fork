@@ -2343,6 +2343,47 @@ describe("QuoteClientPageV2 color api failure", () => {
   });
 });
 
+// 기본 견적 무료 색상 — 테슬라처럼 유료 색상이 isDefault 로 내려오면
+// 기본 견적이 추가요금과 함께 시작한다. 0원 표준색으로 시작해야 한다.
+describe("QuoteClientPageV2 default color no-surcharge", () => {
+  it("submits the quote with the 0-won standard color even when a surcharge color is flagged default", async () => {
+    navigationMock.searchParams = new URLSearchParams(
+      "vehicle=preparing-car&customerType=individual&trim=trim-default",
+    );
+    const teslaColors = [
+      { id: "ext-black", kind: "EXTERIOR", name: "솔리드 블랙", hexCode: "#1A1A1A", imageUrl: null, priceDelta: 1_000_000, isDefault: true, sortOrder: 0 },
+      { id: "ext-stealth-grey", kind: "EXTERIOR", name: "스텔스 그레이", hexCode: "#8D8E8F", imageUrl: null, priceDelta: 1_000_000, isDefault: false, sortOrder: 1 },
+      { id: "ext-pearl-white", kind: "EXTERIOR", name: "펄 화이트 멀티코트", hexCode: "#F4F4F4", imageUrl: null, priceDelta: 0, isDefault: false, sortOrder: 2 },
+      { id: "int-black", kind: "INTERIOR", name: "블랙 인테리어", hexCode: "#171717", imageUrl: null, priceDelta: 0, isDefault: false, sortOrder: 0 },
+    ];
+    const fetchMock = quotePageFetchMock({
+      colors: () => Response.json({ success: true, data: teslaColors }),
+      trims: [makePublicTrim({ id: "trim-default", name: "기본 트림" })],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<QuoteClientPageV2 vehicles={vehicles} />);
+
+    expect(await screen.findByText("펄 화이트 멀티코트")).toBeInTheDocument();
+    const submit = await screen.findByRole("button", { name: "월 납입금 확인하기" });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([request]) => request.toString().endsWith("/quote")),
+      ).toBe(true);
+    });
+    const quoteCall = fetchMock.mock.calls.find(([request]) =>
+      request.toString().endsWith("/quote"),
+    );
+    expect(JSON.parse(String(quoteCall?.[1]?.body))).toMatchObject({
+      exteriorColorId: "ext-pearl-white",
+      interiorColorId: "int-black",
+    });
+  });
+});
+
 // T13 연동 — 부모가 메인 견적 비율을 ComparisonSection primaryRates 로 넘긴다.
 describe("QuoteClientPageV2 comparison primaryRates", () => {
   it("passes the main quote rates so the comparison caption matches 선납 30%", async () => {
