@@ -70,7 +70,9 @@ describe("buildQuoteDeliveredMessage", () => {
 describe("buildQuoteDeliveredButtons", () => {
   // 버튼 링크에 미치환 변수가 남으면 링크 검증에 걸려 1030 으로 실패한다.
   it("모바일·PC 링크가 완성된 https URL 이다", () => {
-    const [button] = buildQuoteDeliveredButtons(VARS.링크);
+    const [channelAdd, button] = buildQuoteDeliveredButtons(VARS.링크);
+    // 채널 추가형 템플릿이라 '채널 추가'가 항상 첫 버튼이어야 한다(순서·이름 고정).
+    expect(channelAdd).toEqual({ name: "채널 추가", type: "AC" });
     expect(button.type).toBe("WL");
     expect(button.url_mobile).toBe(VARS.링크);
     expect(button.url_pc).toBe(VARS.링크);
