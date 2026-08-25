@@ -9,8 +9,10 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+import { BottomDockScrim } from "@/components/layout/BottomDockScrim";
 import { DOCK_BOTTOM_PADDING_CLASS } from "@/components/layout/dock";
 import { ChannelTalkButton } from "@/components/quote/ChannelTalkButton";
+import { NoSalesCallBalloon } from "@/components/ui/NoSalesCallBalloon";
 import { openChannelTalk } from "@/lib/channel-talk";
 import {
   SUPPORT_PHONE_DISPLAY,
@@ -70,7 +72,8 @@ export function QuoteResultDeliveryBar({
         DOCK_BOTTOM_PADDING_CLASS,
       )}
     >
-      <div className="mx-auto flex max-w-[680px] flex-col gap-3">
+      <BottomDockScrim />
+      <div className="relative mx-auto flex max-w-[680px] flex-col gap-3">
         {/* 채널톡 경로는 고객이 대화창에 붙여넣고 보내야 비로소 상담사에게 닿는다.
             웹에서는 실제 전송 여부를 알 수 없으므로, 대화창을 연 직후에는 "아직 안 보냈다"고
             안내하고 고객이 '보냈어요'로 직접 넘기게 한다. 연 것만으로 완료처럼 보이면
@@ -152,20 +155,26 @@ export function QuoteResultDeliveryBar({
           </p>
         ) : null}
 
-        <button
-          type="button"
-          onClick={onQuoteDeliver}
-          disabled={isDelivering}
-          aria-busy={isDelivering}
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-btn bg-[var(--color-kakao-action)] px-5 text-[15px] font-extrabold text-[var(--color-kakao-ink)] shadow-card transition-colors duration-state hover:bg-[var(--color-kakao-action-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
-        >
-          <KakaoBubbleIcon />
-          {isDelivering
-            ? channelTalkDelivery
-              ? "요청 준비 중…"
-              : "전송 중…"
-            : "카카오톡으로 견적서 받기"}
-        </button>
+        <div className="relative">
+          {/* 전송 전에만 보이는 안심 말풍선. 전송 중·완료·에러 상태 메시지와는 겹치지 않게 숨긴다. */}
+          {!isDelivering && !deliverySuccess && !deliveryError ? (
+            <NoSalesCallBalloon />
+          ) : null}
+          <button
+            type="button"
+            onClick={onQuoteDeliver}
+            disabled={isDelivering}
+            aria-busy={isDelivering}
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-btn bg-[var(--color-kakao-action)] px-5 text-[15px] font-extrabold text-[var(--color-kakao-ink)] shadow-card transition-colors duration-state hover:bg-[var(--color-kakao-action-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+          >
+            <KakaoBubbleIcon />
+            {isDelivering
+              ? channelTalkDelivery
+                ? "요청 준비 중…"
+                : "전송 중…"
+              : "카카오톡으로 견적서 받기"}
+          </button>
+        </div>
       </div>
     </div>
   );

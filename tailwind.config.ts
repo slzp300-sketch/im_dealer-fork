@@ -231,6 +231,14 @@ const config: Config = {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-7px)" },
         },
+        // 도리도리: 꼬리를 축으로 좌우로 갸웃갸웃 흔들고 나머지 구간은 쉰다.
+        headshake: {
+          "0%, 40%, 100%": { transform: "rotate(0deg)" },
+          "8%": { transform: "rotate(-7deg)" },
+          "16%": { transform: "rotate(6deg)" },
+          "24%": { transform: "rotate(-4deg)" },
+          "32%": { transform: "rotate(2deg)" },
+        },
       },
 
       animation: {
@@ -238,6 +246,7 @@ const config: Config = {
         "fade-in": "fadeIn 0.2s ease",
         "slide-down": "slideDown 0.22s ease-out",
         nudge: "nudge 1.15s ease-in-out infinite",
+        headshake: "headshake 2.6s ease-in-out infinite",
       },
     },
   },

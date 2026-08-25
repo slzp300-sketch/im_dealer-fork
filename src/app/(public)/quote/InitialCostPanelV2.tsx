@@ -169,8 +169,8 @@ export function InitialCostPanelV2({
               )}
             >
               {showGuestPerk && (
-                <span className="absolute -top-3 right-2 rounded-full bg-status-warning px-2.5 py-1 text-[11.5px] font-extrabold leading-tight text-surface shadow-card motion-safe:animate-nudge after:absolute after:-bottom-[3px] after:right-3 after:h-1.5 after:w-1.5 after:rotate-45 after:bg-status-warning after:content-['']">
-                  회원만 0원
+                <span className="absolute -top-4 right-2 rounded-full bg-status-warning px-3.5 py-1.5 text-[13.5px] font-extrabold leading-tight text-surface shadow-card motion-safe:animate-nudge after:absolute after:-bottom-[4px] after:right-4 after:h-2 after:w-2 after:rotate-45 after:bg-status-warning after:content-['']">
+                  80% 고객이 선택함
                 </span>
               )}
               <span className="block text-[10px] font-medium uppercase tracking-[0.06em] text-text-muted">

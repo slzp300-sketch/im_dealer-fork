@@ -98,6 +98,25 @@ describe("QuoteResultActions", () => {
       ).toBe(bar.querySelector("button"));
     });
 
+    it("When idle Then it shows the no-sales-call balloon above the delivery button", () => {
+      render(<QuoteResultActions {...props} />);
+
+      const balloon = screen.getByText("영업전화 가지 않아요~!");
+      expect(balloon.className).toMatch(/animate-headshake/);
+      expect(balloon.className).toMatch(/pointer-events-none/);
+    });
+
+    it("When delivering, succeeded, or failed Then it hides the no-sales-call balloon", () => {
+      const { rerender } = render(<QuoteResultActions {...props} isDelivering />);
+      expect(screen.queryByText("영업전화 가지 않아요~!")).not.toBeInTheDocument();
+
+      rerender(<QuoteResultActions {...props} deliverySuccess />);
+      expect(screen.queryByText("영업전화 가지 않아요~!")).not.toBeInTheDocument();
+
+      rerender(<QuoteResultActions {...props} deliveryError="카카오톡 전송에 실패했습니다." />);
+      expect(screen.queryByText("영업전화 가지 않아요~!")).not.toBeInTheDocument();
+    });
+
     it("When Kakao delivery is pending Then it exposes the busy state", () => {
       render(<QuoteResultActions {...props} isDelivering />);
 
