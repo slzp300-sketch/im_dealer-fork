@@ -50,3 +50,22 @@ export function trackQuoteDeliverySent(context: ChannelTalkQuoteContext): void {
   if (typeof window === "undefined" || !window.ChannelIO) return;
   window.ChannelIO("track", "quote_delivery_sent", context);
 }
+
+export interface EventConsultContext {
+  source: "/event";
+  vehicleName?: string;
+  trimName?: string;
+  monthlyPrice?: string;
+  discount?: string;
+}
+
+// /event 특판 페이지에서 카카오 채널 상담으로 보내기 직전에, 고객이 보고 있던
+// 차량 컨텍스트를 남긴다. 카카오 채널 링크 자체는 데이터를 실을 수 없지만
+// 채널톡↔카카오 연동으로 상담사가 데스크에서 이 이벤트를 보고 어떤 차량 문의인지 안다.
+export function trackEventConsultation(context: EventConsultContext): void {
+  if (typeof window === "undefined" || !window.ChannelIO) return;
+  window.ChannelIO("track", "event_consultation", {
+    promotion: "장기렌트 오픈 한정 특별판매",
+    ...context,
+  });
+}

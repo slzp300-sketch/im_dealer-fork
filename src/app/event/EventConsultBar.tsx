@@ -1,13 +1,14 @@
 "use client";
 
 import { DOCK_BOTTOM_PADDING_CLASS } from "@/components/layout/dock";
-import { openChannelTalk } from "@/lib/channel-talk";
+import { openChannelTalk, trackEventConsultation } from "@/lib/channel-talk";
 import { kakaoChannelChatUrl } from "@/lib/kakao/channel-add";
 import { cn } from "@/lib/utils";
 
 /** 이벤트 페이지 하단 고정 카카오 상담 바. 클릭 즉시(동기) 창을 열어야 팝업 차단을 피한다. */
 export function EventConsultBar() {
   const handleClick = () => {
+    trackEventConsultation({ source: "/event" });
     const url = kakaoChannelChatUrl();
     if (url) {
       window.open(url, "_blank", "noopener,noreferrer");
