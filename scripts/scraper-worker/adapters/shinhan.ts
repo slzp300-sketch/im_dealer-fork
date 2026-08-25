@@ -101,14 +101,16 @@ function calcParams(o: {
 
 interface CollectResult { baseRates: Record<string, number>; warnings: string[]; depositRate36_10000?: number; prepayRate36_10000?: number }
 
-/** 트림의 유효 색상코드(exOloId) 조회 — P02.ajax carColorList 에서 무료색(없으면 첫 색). 색상은 모델별이라 필수. */
-async function getColorId(ctx: AdapterContext, b: TrimBase): Promise<string> {
+/** 트림의 유효 색상코드(exOloId) 후보 — P02.ajax carColorList 에서 무료색(없으면 첫 색) 우선, 나머지는 원래 순서.
+ *  색상은 모델별이라 필수. 첫 후보가 재고한정/취급제한 색상이면 계산 전체가 F 로 거부되므로 대체 후보가 필요하다. */
+async function getColorIds(ctx: AdapterContext, b: TrimBase): Promise<string[]> {
   try {
     const p02 = await ajax(ctx, `${BASE}/ADPFM860P02.ajax`, { dnwaCarBrdId: b.brdId, dnwaCarMdlId: b.mdlId, dnwaCarDlMdlId: b.dlMdlId, dnwaCarTrimId: b.trimId, carMdlCd: b.carMdlCd, dnwaCarBrdNm: b.brandName, dnwaCarMdlNm: b.modelName, dnwaCarDlMdlNm: b.dlMdlName, dnwaCarTrimNm: b.trimName });
     const colors = zip(p02?.carColorList);
-    const free = colors.find((c) => num(c.dnwaCarOloAt) === 0) ?? colors[0];
-    return String(free?.dnwaCarOloId ?? "");
-  } catch { return ""; }
+    const first = colors.find((c) => num(c.dnwaCarOloAt) === 0) ?? colors[0];
+    const ids = [first, ...colors.filter((c) => c !== first)].map((c) => String(c?.dnwaCarOloId ?? "")).filter(Boolean);
+    return [...new Set(ids)];
+  } catch { return []; }
 }
 
 interface TrimBase {
@@ -125,7 +127,8 @@ async function collectTrim(ctx: AdapterContext, base: TrimBase, opts?: { skipDep
   const dlv = await R02(ctx, { type: "getDeliveryInfo", vhTowCcd: "10", carMdlCd: base.carMdlCd, dnwaCarBrdId: base.brdId, dnwaCarMdlId: base.mdlId, dnwaCarDlMdlId: base.dlMdlId, dnwaCarTrimId: base.trimId, optCdList: "", vhPhaRqN: "", gubn: "Y" });
   const rgAgcAfoN = String(dlv?.rgAgcAfoN ?? "");
   const cggAt = num(dlv?.cggAt);
-  const colorId = await getColorId(ctx, base);
+  const colorIds = await getColorIds(ctx, base);
+  let colorId = colorIds[0] ?? "";
 
   const ruvOf = async (month: number, distCode: string): Promise<number> => {
     const selNum = month === 36 ? "1" : month === 48 ? "2" : "3";
@@ -137,11 +140,11 @@ async function collectTrim(ctx: AdapterContext, base: TrimBase, opts?: { skipDep
 
   // 셀끼리는 서로 의존하지 않는다(calcParams 에 잔존율까지 모두 실어 보냄) → 동시 처리.
   // 결과·경고 순서는 mapPool 이 입력 순서로 유지한다. 순차로 되돌리려면 SCRAPER_PACE=safe.
-  const cells = await mapPool(RATE_CELLS, cellConcurrency(ctx.config), async (c) => {
+  const runCells = (cid: string) => mapPool(RATE_CELLS, cellConcurrency(ctx.config), async (c) => {
     try {
       const ruvRt = await ruvOf(c.month, c.distCode);
       await sleep(reqDelay(ctx.config));
-      const res = await R02(ctx, calcParams({ ...base, exhQty: base.exhQty, rgAgcAfoN, cggAt, colorId, month: c.month, distCode: c.distCode, ruvRt, ppnRt: 0, gymRt: 0, gymAt: 0 }));
+      const res = await R02(ctx, calcParams({ ...base, exhQty: base.exhQty, rgAgcAfoN, cggAt, colorId: cid, month: c.month, distCode: c.distCode, ruvRt, ppnRt: 0, gymRt: 0, gymAt: 0 }));
       const pay = num(res?.mRlPytRetAt1);
       return { pay, ruvRt, warn: pay > 0 ? null : `${c.month}/${c.dist} 산출 0` };
     } catch (e) {
@@ -149,6 +152,25 @@ async function collectTrim(ctx: AdapterContext, base: TrimBase, opts?: { skipDep
       return { pay: 0, ruvRt: undefined as number | undefined, warn: `${c.month}/${c.dist}: ${(e as Error).message.slice(0, 80)}` };
     }
   });
+  let cells = await runCells(colorId);
+
+  // 첫 후보가 재고한정/취급제한 색상이면 전 셀이 "대리점 출고만 가능" F → 대체 색상을 1셀 탐침으로 찾아 재수집
+  const RESTRICTED_COLOR = /재고한정|취급제한/;
+  if (!cells.some((r) => r.pay > 0) && cells.some((r) => r.warn && RESTRICTED_COLOR.test(r.warn))) {
+    const ruvRt36 = await ruvOf(36, "1");
+    for (const alt of colorIds.slice(1, 6)) {
+      try {
+        await sleep(reqDelay(ctx.config));
+        const probe = await R02(ctx, calcParams({ ...base, rgAgcAfoN, cggAt, colorId: alt, month: 36, distCode: "1", ruvRt: ruvRt36, ppnRt: 0, gymRt: 0, gymAt: 0 }));
+        if (num(probe?.mRlPytRetAt1) > 0) {
+          ctx.log(`  [색상 대체] ${colorId || "(없음)"} → ${alt} — 재고한정/취급제한 회피`);
+          colorId = alt;
+          cells = await runCells(alt);
+          break;
+        }
+      } catch { /* 이 색상도 거부 → 다음 후보 */ }
+    }
+  }
   RATE_CELLS.forEach((c, i) => {
     const r = cells[i];
     if (r.pay > 0) baseRates[`${c.month}_${c.dist}`] = r.pay;
