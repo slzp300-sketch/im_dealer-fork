@@ -227,14 +227,18 @@ describe("POST /api/quote/deliver", () => {
     expect(await res.json()).toEqual({ success: true, data: { deliveryId: "delivery-1" } });
 
     expect(mocks.upload).toHaveBeenCalledWith({ png: expect.any(Uint8Array) });
-    // 알림톡은 이미지를 못 붙이므로 견적서 열람 링크를 버튼으로 실어 보낸다.
+    // 채널 추가형 템플릿: 첫 버튼은 AC, 두 번째는 견적서 열람 웹링크.
     expect(mocks.enqueueAlimtalk).toHaveBeenCalledWith(
       expect.objectContaining({
         templateKey: "QUOTE_DELIVERED",
         phone: "01012345678",
         buttons: [
+          { name: "채널 추가", type: "AC" },
           expect.objectContaining({
+            name: "견적서 확인하기",
+            type: "WL",
             url_mobile: "https://imdealer.example/quote/delivery/delivery-1",
+            url_pc: "https://imdealer.example/quote/delivery/delivery-1",
           }),
         ],
         refType: "quote",

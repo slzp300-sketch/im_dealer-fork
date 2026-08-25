@@ -4,7 +4,7 @@
 //
 // 등록 원문의 `#{변수}` 자리에 값을 채운 결과가 buildMessage 의 반환값이어야 한다.
 
-import type { AlimtalkButton } from "./types";
+import type { AlimtalkChannelAddButton, AlimtalkWebLinkButton } from "./types";
 
 export type AlimtalkTemplateKey =
   | "QUOTE_DELIVERED"
@@ -63,8 +63,15 @@ ${고객명}님, 요청하신 견적서가 준비되었습니다.
 ※ 본 메시지는 견적서 발송을 요청하신 고객님께 발송되는 안내입니다.`;
 }
 
-export function buildQuoteDeliveredButtons(linkUrl: string): AlimtalkButton[] {
-  return [{ name: "견적서 확인하기", type: "WL", url_mobile: linkUrl, url_pc: linkUrl }];
+// 견적서 템플릿은 채널 추가형이라 카카오가 맨 앞에 '채널 추가' 버튼을 고정해 둔다.
+// 이 버튼을 빼거나 순서를 바꾸면 등록 내용과 어긋나 3027(버튼 불일치)로 실패한다.
+export function buildQuoteDeliveredButtons(
+  linkUrl: string,
+): [AlimtalkChannelAddButton, AlimtalkWebLinkButton] {
+  return [
+    { name: "채널 추가", type: "AC" },
+    { name: "견적서 확인하기", type: "WL", url_mobile: linkUrl, url_pc: linkUrl },
+  ];
 }
 
 /** 비즈톡센터에 등록할 원문. 검수 접수 시 이 문자열을 그대로 붙여넣는다. */
@@ -96,7 +103,7 @@ ${v.고객명}님, 계약이 완료되었습니다.
 ※ 본 메시지는 계약을 완료하신 고객님께 발송되는 안내입니다.`;
 }
 
-export function buildReviewRequestButtons(linkUrl: string): AlimtalkButton[] {
+export function buildReviewRequestButtons(linkUrl: string): AlimtalkWebLinkButton[] {
   return [{ name: "후기 작성하기", type: "WL", url_mobile: linkUrl, url_pc: linkUrl }];
 }
 
@@ -145,7 +152,7 @@ ${v.고객명}님, 아임딜러 회원가입이 완료되었습니다.
  */
 export const SIGNUP_COMPLETED_MYPAGE_URL = "https://www.imdealer.co.kr/mypage";
 
-export function buildSignupCompletedButtons(): AlimtalkButton[] {
+export function buildSignupCompletedButtons(): AlimtalkWebLinkButton[] {
   return [
     {
       name: "마이페이지 바로가기",
