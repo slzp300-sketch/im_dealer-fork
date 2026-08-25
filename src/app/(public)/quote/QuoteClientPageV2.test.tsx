@@ -262,7 +262,13 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     expect(deliveryButton).toBe(deliveryBar.querySelector("button"));
     fireEvent.click(deliveryButton);
 
-    // Then: anonymous users enter Kakao consent before any delivery request
+    // Then: anonymous users see the delivery login gate first; Kakao consent starts
+    // only from the gate CTA, and no delivery request has been made yet.
+    await screen.findByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" });
+    expect(supabaseMock.signInWithOAuth).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "카카오로 3초 로그인하고 견적서 받기" })
+    );
     await waitFor(() => expect(supabaseMock.signInWithOAuth).toHaveBeenCalledTimes(1));
     const requestedUrls = fetchMock.mock.calls.map(([input]) => input.toString());
     expect(requestedUrls.some((url) => url === "/api/quote/image")).toBe(false);
@@ -435,6 +441,30 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     expect(navigationMock.router.push).not.toHaveBeenCalledWith(
       expect.stringContaining("/login?next=")
     );
+  });
+
+  // 프로덕션 회귀 방지 — 카카오 자동발송 경로에서도 비회원은 OAuth 직행이 아니라
+  // 게이트 모달을 먼저 봐야 한다(채널톡 경로와 동일 정책).
+  it("shows the delivery login gate instead of redirecting a guest on the Kakao auto-send path", async () => {
+    writeCalculatedRestore();
+    supabaseMock.getUser.mockResolvedValue({ data: { user: null } });
+    const fetchMock = createFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<QuoteClientPageV2 vehicles={vehicles} />);
+    fireEvent.click(await screen.findByRole("button", { name: "카카오톡으로 견적서 받기" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" })
+    ).toBeInTheDocument();
+    expect(supabaseMock.signInWithOAuth).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/quote/deliver", expect.anything());
+
+    // 모달 CTA 를 눌러야 비로소 카카오 로그인이 시작된다.
+    fireEvent.click(
+      screen.getByRole("button", { name: "카카오로 3초 로그인하고 견적서 받기" })
+    );
+    await waitFor(() => expect(supabaseMock.signInWithOAuth).toHaveBeenCalledTimes(1));
   });
 
   it("routes quote delivery to Kakao channel add when the Kakao flag is disabled (stopgap)", async () => {
@@ -1746,6 +1776,12 @@ describe("QuoteClientPageV2 kakao consent round trip", () => {
       await screen.findByRole("button", { name: "카카오톡으로 견적서 받기" })
     );
 
+    // 비회원은 게이트 모달을 먼저 보고, CTA 클릭으로 카카오 동의 왕복을 시작한다.
+    await screen.findByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "카카오로 3초 로그인하고 견적서 받기" })
+    );
+
     await waitFor(() => expect(supabaseMock.signInWithOAuth).toHaveBeenCalledTimes(1));
     const redirectTo =
       supabaseMock.signInWithOAuth.mock.calls[0]?.[0]?.options?.redirectTo ?? "";
@@ -1997,6 +2033,11 @@ describe("QuoteClientPageV2 delivery auto-resume guard", () => {
     const guest = render(<QuoteClientPageV2 vehicles={vehicles} />);
     fireEvent.click(
       await screen.findByRole("button", { name: "카카오톡으로 견적서 받기" })
+    );
+    // 게이트 모달 CTA 를 거쳐야 동의 리다이렉트가 시작된다.
+    await screen.findByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "카카오로 3초 로그인하고 견적서 받기" })
     );
     await waitFor(() => expect(supabaseMock.signInWithOAuth).toHaveBeenCalledTimes(1));
     const redirectTo =

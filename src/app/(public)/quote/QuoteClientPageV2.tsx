@@ -1096,11 +1096,11 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        // 사용자 클릭으로 나가는 왕복만 자동 재개 1회분을 허용한다. 자동 재개 레인이
-        // 여기 도달했다면(로그인이 풀린 극한 레이스) 예산을 다시 채우면 루프가 되므로
-        // 채우지 않는다 — 돌아와도 소진 표식이 자동 재개를 막는다.
-        if (!auto) grantAutoDeliveryResume();
-        await startKakaoConsentFlow();
+        // 비회원 — 바로 OAuth 로 보내지 않고 게이트 모달로 설득한다(채널톡 경로와 동일).
+        // 모달 CTA(handleDeliveryLoginGateConfirm)가 deliver=1 복귀 표식과
+        // 자동 재개 1회분을 챙기므로 여기서는 노출만 한다. 자동 재개 레인이
+        // 여기 도달한 경우(로그인이 풀린 극한 레이스)에도 모달은 루프를 만들지 않는다.
+        showDeliveryLoginGate();
         return;
       }
 
@@ -1160,6 +1160,25 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
     await deliverQuoteToKakao(false);
   }
 
+  /**
+   * 비회원 견적서 수령 게이트 노출. 카카오 자동발송·채널톡 두 경로가 공유한다 —
+   * 어느 경로든 비회원은 OAuth 로 직행하지 않고 먼저 이 모달로 설득한다.
+   * 퍼널 이벤트는 세션당 1회만 기록한다(QuoteCalcLog 와 조인용).
+   */
+  function showDeliveryLoginGate() {
+    setDeliveryError(null);
+    setDeliverSuccess(false);
+    setLoginGate("delivery");
+    if (!deliveryGateShownTracked.current) {
+      deliveryGateShownTracked.current = true;
+      void track("delivery_gate_shown", {
+        sessionId: quoteSessionId,
+        vehicleId: selectedVehicle?.id,
+        metadata: { vehicleSlug: selectedVehicle?.slug },
+      });
+    }
+  }
+
   // ─── 임시방편: 견적서 받기 → 안내 모달 → 카카오 채널 대화창 (비즈톡 자동발송 전) ───
   // ① 견적 저장 + 채널톡 track(상담사용 컨텍스트) + 요청 메시지 클립보드 복사
   // ② 안내 모달을 띄워 "복사했어요, 붙여넣어 보내주세요"를 이동 전에 반드시 읽게 한다.
@@ -1174,18 +1193,7 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
     }
     // 견적서 수령은 회원 전용 — 비회원이면 저장·복사 전에 로그인 게이트로 보낸다.
     if (!(await hasActiveSession())) {
-      setDeliveryError(null);
-      setDeliverSuccess(false);
-      setLoginGate("delivery");
-      // 게이트 정책 재검토용 퍼널: 견적 세션 ID 로 기록해 QuoteCalcLog 와 조인 가능하게 한다.
-      if (!deliveryGateShownTracked.current) {
-        deliveryGateShownTracked.current = true;
-        void track("delivery_gate_shown", {
-          sessionId: quoteSessionId,
-          vehicleId: selectedVehicle?.id,
-          metadata: { vehicleSlug: selectedVehicle?.slug },
-        });
-      }
+      showDeliveryLoginGate();
       return;
     }
     setIsDelivering(true);
