@@ -577,7 +577,7 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     );
 
     // 로그인 안내 모달만 뜨고, 견적 저장·복사·대화창은 모두 보류된다.
-    await screen.findByRole("dialog", { name: "로그인이 필요해요" });
+    await screen.findByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" });
     expect(fetchMock).not.toHaveBeenCalledWith("/api/quote/save", expect.anything());
     expect(writeText).not.toHaveBeenCalled();
     expect(openSpy).not.toHaveBeenCalled();
@@ -620,8 +620,8 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "카카오톡으로 견적서 받기" })
     );
-    await screen.findByRole("dialog", { name: "로그인이 필요해요" });
-    fireEvent.click(screen.getByRole("button", { name: "카카오 로그인" }));
+    await screen.findByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" });
+    fireEvent.click(screen.getByRole("button", { name: "카카오로 3초 로그인하고 견적서 받기" }));
 
     await waitFor(() => expect(supabaseMock.signInWithOAuth).toHaveBeenCalled());
     const redirectTo = supabaseMock.signInWithOAuth.mock.calls.at(-1)?.[0]?.options
@@ -684,7 +684,7 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     // 팝업 차단 때문에 대화창은 CTA 클릭으로만 연다.
     expect(openSpy).not.toHaveBeenCalled();
     expect(
-      screen.queryByRole("dialog", { name: "로그인이 필요해요" })
+      screen.queryByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" })
     ).not.toBeInTheDocument();
     // 로그인 상태 복귀에서는 게이트 이벤트가 기록되지 않는다.
     const gateEvents = fetchMock.mock.calls
@@ -724,8 +724,8 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "카카오톡으로 견적서 받기" })
     );
-    await screen.findByRole("dialog", { name: "로그인이 필요해요" });
-    fireEvent.click(screen.getByRole("button", { name: "카카오 로그인" }));
+    await screen.findByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" });
+    fireEvent.click(screen.getByRole("button", { name: "카카오로 3초 로그인하고 견적서 받기" }));
     await waitFor(() => expect(supabaseMock.signInWithOAuth).toHaveBeenCalled());
 
     const loginClickCall = fetchMock.mock.calls.find(
@@ -790,7 +790,7 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     fireEvent.click(await screen.findByRole("button", {
       name: /보증금·선납금 없이 시작/,
     }));
-    fireEvent.click(await screen.findByRole("button", { name: "카카오 로그인" }));
+    fireEvent.click(await screen.findByRole("button", { name: "카카오로 3초 로그인" }));
 
     expect(navigationMock.router.push).toHaveBeenCalledWith(
       expect.stringContaining("source%3DAI")
@@ -1170,10 +1170,10 @@ describe("QuoteClientPageV2 locked result representation", () => {
         screen.getByRole("button", { name: "로그인하고 월 납입금 보기" })
       );
       expect(
-        await screen.findByRole("dialog", { name: "로그인이 필요해요" })
+        await screen.findByRole("dialog", { name: "지금 로그인하면" })
       ).toBeInTheDocument();
       expect(
-        screen.getByText(/초기비용 0원 또는 보증금 선납금 조건 수정 하려면/)
+        screen.getByText("보증금·선납금 비율 자유 조절")
       ).toBeInTheDocument();
     }
   );
@@ -1204,13 +1204,13 @@ describe("QuoteClientPageV2 result first screen", () => {
     await screen.findByText((_, node) => node?.textContent === "53만원");
 
     fireEvent.click(screen.getByRole("button", { name: /보증금·선납금 없이 시작/ }));
-    expect(await screen.findByRole("dialog", { name: "로그인이 필요해요" })).toBeInTheDocument();
-    expect(screen.getByText(/초기비용 0원 또는 보증금 선납금 조건 수정 하려면/)).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "지금 로그인하면" })).toBeInTheDocument();
+    expect(screen.getByText("보증금·선납금 비율 자유 조절")).toBeInTheDocument();
     expect(screen.getByText((_, node) => node?.textContent === "53만원")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
     fireEvent.click(screen.getAllByRole("button", { name: "20%" })[0]!);
-    expect(await screen.findByRole("dialog", { name: "로그인이 필요해요" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "지금 로그인하면" })).toBeInTheDocument();
     expect(screen.getByText((_, node) => node?.textContent === "53만원")).toBeInTheDocument();
   });
 
@@ -1229,7 +1229,7 @@ describe("QuoteClientPageV2 result first screen", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /보증금·선납금 없이 시작/ }));
-    expect(screen.queryByRole("dialog", { name: "로그인이 필요해요" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "지금 로그인하면" })).not.toBeInTheDocument();
     expect(await screen.findByText((_, node) => node?.textContent === "70만원")).toBeInTheDocument();
   });
 
@@ -1255,7 +1255,7 @@ describe("QuoteClientPageV2 result first screen", () => {
 
     // 회원이므로 로그인 모달 없이 진행된다.
     expect(
-      screen.queryByRole("dialog", { name: "로그인이 필요해요" })
+      screen.queryByRole("dialog", { name: "지금 로그인하면" })
     ).not.toBeInTheDocument();
     // 잔존한 선납 30% 금액(53만원)이 아니라 실제 무보증 월납(70만원)이 떠야 한다.
     expect(

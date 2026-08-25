@@ -47,7 +47,8 @@ import {
 } from "@/lib/channel-talk";
 import { kakaoChannelChatUrl } from "@/lib/kakao/channel-add";
 import { QuoteDeliveryGuideModal } from "@/components/quote/QuoteDeliveryGuideModal";
-import { LoginRequiredModal } from "@/components/quote/LoginRequiredModal";
+import { LoginBenefitsModal } from "@/components/quote/LoginBenefitsModal";
+import { QuoteDeliveryLoginModal } from "@/components/quote/QuoteDeliveryLoginModal";
 import { ComparisonSection } from "@/components/quote/ComparisonSection";
 import { type ComparisonTrimData } from "@/components/quote/VehicleConfigPanel";
 import { EvSubsidyNotice } from "@/components/quote/EvSubsidyNotice";
@@ -1771,31 +1772,18 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
         </AnimatePresence>
       </main>
 
-      <LoginRequiredModal
-        open={loginGate !== null}
+      {/* 초기비용 변경 게이트 — 혜택 소구형 마케팅 모달 */}
+      <LoginBenefitsModal
+        open={loginGate === "initialCost"}
         onClose={() => setLoginGate(null)}
-        onKakaoLogin={() => {
-          if (loginGate === "delivery") {
-            void handleDeliveryLoginGateConfirm();
-            return;
-          }
-          handleGateLogin();
-        }}
-        description={
-          loginGate === "initialCost" ? (
-            <>
-              초기비용 0원 또는 보증금 선납금 조건 수정 하려면 로그인이 필요해요
-              <br />
-              카카오톡 간편로그인으로 빠르게 시작해보세요~!
-            </>
-          ) : (
-            <>
-              견적서는 회원에게만 보내드리고 있어요.
-              <br />
-              카카오톡으로 빠르게 시작해보세요.
-            </>
-          )
-        }
+        onKakaoLogin={handleGateLogin}
+      />
+
+      {/* 견적서 수령 게이트 — 견적서 발송 약속형 마케팅 모달 */}
+      <QuoteDeliveryLoginModal
+        open={loginGate === "delivery"}
+        onClose={() => setLoginGate(null)}
+        onKakaoLogin={() => void handleDeliveryLoginGateConfirm()}
       />
 
       <QuoteDeliveryGuideModal

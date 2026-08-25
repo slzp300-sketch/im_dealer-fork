@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
-import { openChannelTalk, trackEventConsultation } from "@/lib/channel-talk";
-import { kakaoChannelChatUrl } from "@/lib/kakao/channel-add";
+import { motion } from "framer-motion";
+import { EventPromoModal } from "./EventPromoModal";
 
 export type EventCar = {
   id: string;
@@ -21,102 +19,12 @@ export type EventCar = {
   featured?: boolean;
 };
 
-// 클릭 핸들러에서 동기적으로 창을 열어야 팝업 차단을 피한다 (EventConsultBar와 동일 동작).
-function openConsult() {
-  const url = kakaoChannelChatUrl();
-  if (url) {
-    window.open(url, "_blank", "noopener,noreferrer");
-    return;
-  }
-  openChannelTalk();
-}
-
 function StockBadge({ stock }: { stock: string }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#FFF0F0] px-3 py-1.5 text-[14px] font-extrabold leading-none text-[#FF5A2E]">
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FF5A2E]" aria-hidden />
       {stock} 남음
     </span>
-  );
-}
-
-function ConsultConfirmModal({
-  car,
-  open,
-  onClose,
-}: {
-  car: EventCar;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const handleConfirm = () => {
-    // 카카오 링크는 데이터를 실을 수 없으므로, 열기 직전에 채널톡 이벤트로 차량 정보를 남긴다.
-    // 채널톡↔카카오 연동으로 상담사가 데스크에서 어떤 차량 문의인지 확인할 수 있다.
-    trackEventConsultation({
-      source: "/event",
-      vehicleName: `${car.brand} ${car.model}`,
-      trimName: car.trim,
-      monthlyPrice: `월 ${car.nowMonthly}만원`,
-      discount: car.discount,
-    });
-    openConsult();
-    onClose();
-  };
-
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <AnimatePresence>
-      {open ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 bg-black/50"
-            onClick={onClose}
-            aria-hidden
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="relative w-full max-w-[400px] rounded-[20px] bg-white p-6 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="consult-modal-title"
-          >
-            <p id="consult-modal-title" className="text-[18px] font-extrabold text-[#111827]">
-              {car.brand} {car.model}
-            </p>
-            <p className="mt-2 text-[15px] leading-relaxed text-[#555555]">
-              카카오톡 상담으로 이어서 진행하시겠어요?
-              <br />
-              상담은 무료이며, 부담 없이 문의하셔도 됩니다.
-            </p>
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 rounded-[14px] bg-[#F5F5F7] py-3.5 text-[15px] font-bold text-[#555555] transition-colors hover:bg-[#E8E9ED] active:scale-[0.98]"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirm}
-                className="flex-1 rounded-[14px] bg-[#FEE500] py-3.5 text-[15px] font-bold text-[#191919] transition-colors hover:bg-[#F5DC00] active:scale-[0.98]"
-              >
-                카카오톡으로 상담하기
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      ) : null}
-    </AnimatePresence>,
-    document.body
   );
 }
 
@@ -219,22 +127,20 @@ export function VehicleCard({ car, index = 0 }: { car: EventCar; index?: number 
       </div>
     </motion.button>
 
-      <ConsultConfirmModal car={car} open={modalOpen} onClose={() => setModalOpen(false)} />
+      <EventPromoModal car={car} open={modalOpen} onClose={() => setModalOpen(false)} />
     </>
   );
 }
 
 /** 그리드 마지막 셀을 채우는 상담 유도 카드 */
 export function EventConsultCard({ index = 0 }: { index?: number }) {
-  const handleClick = () => {
-    trackEventConsultation({ source: "/event" });
-    openConsult();
-  };
+  const [modalOpen, setModalOpen] = useState(false);
 
   return (
+    <>
     <motion.button
       type="button"
-      onClick={handleClick}
+      onClick={() => setModalOpen(true)}
       aria-label="찾는 차량이 없을 때 카카오톡 상담하기"
       initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
@@ -262,5 +168,8 @@ export function EventConsultCard({ index = 0 }: { index?: number }) {
         </svg>
       </span>
     </motion.button>
+
+      <EventPromoModal open={modalOpen} onClose={() => setModalOpen(false)} />
+    </>
   );
 }

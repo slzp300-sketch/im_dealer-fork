@@ -1,21 +1,15 @@
 "use client";
 
+import { useState } from "react";
+import { BottomDockScrim } from "@/components/layout/BottomDockScrim";
 import { DOCK_BOTTOM_PADDING_CLASS } from "@/components/layout/dock";
-import { openChannelTalk, trackEventConsultation } from "@/lib/channel-talk";
-import { kakaoChannelChatUrl } from "@/lib/kakao/channel-add";
+import { NoSalesCallBalloon } from "@/components/ui/NoSalesCallBalloon";
 import { cn } from "@/lib/utils";
+import { EventPromoModal } from "./EventPromoModal";
 
-/** 이벤트 페이지 하단 고정 카카오 상담 바. 클릭 즉시(동기) 창을 열어야 팝업 차단을 피한다. */
+/** 이벤트 페이지 하단 고정 카카오 상담 바. 클릭 시 프로모션 모달을 거쳐 상담을 연다. */
 export function EventConsultBar() {
-  const handleClick = () => {
-    trackEventConsultation({ source: "/event" });
-    const url = kakaoChannelChatUrl();
-    if (url) {
-      window.open(url, "_blank", "noopener,noreferrer");
-      return;
-    }
-    openChannelTalk();
-  };
+  const [modalOpen, setModalOpen] = useState(false);
 
   return (
     <div
@@ -26,17 +20,23 @@ export function EventConsultBar() {
         DOCK_BOTTOM_PADDING_CLASS,
       )}
     >
-      <div className="mx-auto flex max-w-[680px] flex-col gap-3">
-        <button
-          type="button"
-          onClick={handleClick}
-          aria-label="카카오톡으로 상담하기"
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-btn bg-[var(--color-kakao-action)] px-5 text-[15px] font-extrabold text-[var(--color-kakao-ink)] shadow-card transition-colors duration-state hover:bg-[var(--color-kakao-action-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[0.98]"
-        >
-          <KakaoBubbleIcon />
-          카카오톡으로 상담하기
-        </button>
+      <BottomDockScrim />
+      <div className="relative mx-auto flex max-w-[680px] flex-col gap-3">
+        <div className="relative">
+          <NoSalesCallBalloon />
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            aria-label="카카오톡으로 상담하기"
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-btn bg-[var(--color-kakao-action)] px-5 text-[15px] font-extrabold text-[var(--color-kakao-ink)] shadow-card transition-colors duration-state hover:bg-[var(--color-kakao-action-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[0.98]"
+          >
+            <KakaoBubbleIcon />
+            카카오톡으로 상담하기
+          </button>
+        </div>
       </div>
+
+      <EventPromoModal open={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
 }
