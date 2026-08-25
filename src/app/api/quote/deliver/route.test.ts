@@ -11,8 +11,6 @@ const mocks = vi.hoisted(() => ({
   render: vi.fn(),
   upload: vi.fn(),
   remove: vi.fn(),
-  getAccessToken: vi.fn(),
-  sendMemo: vi.fn(),
   enqueueAlimtalk: vi.fn(),
   findNotification: vi.fn(),
   createNotification: vi.fn(),
@@ -45,8 +43,6 @@ vi.mock("@/lib/quote-delivery/store", () => ({
   uploadQuoteImage: mocks.upload,
   deleteQuoteImage: mocks.remove,
 }));
-vi.mock("@/lib/kakao/token", () => ({ getKakaoAccessToken: mocks.getAccessToken }));
-vi.mock("@/lib/kakao/memo", () => ({ sendQuoteMemo: mocks.sendMemo }));
 vi.mock("@/lib/alimtalk/enqueue", () => ({
   enqueueAlimtalk: mocks.enqueueAlimtalk,
 }));
@@ -135,7 +131,7 @@ const savedQuote = {
 describe("POST /api/quote/deliver", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("NEXT_PUBLIC_KAKAO_SYNC", "true");
+    vi.stubEnv("NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND", "true");
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://imdealer.example");
     mocks.requireActiveUser.mockResolvedValue({
       user: {
@@ -149,13 +145,11 @@ describe("POST /api/quote/deliver", () => {
     });
     mocks.findSavedQuote.mockResolvedValue(savedQuote);
     mocks.buildOfficialImageData.mockResolvedValue({ ok: true, data: officialImageData });
-    mocks.getAccessToken.mockResolvedValue("access-token");
     mocks.render.mockResolvedValue(new Uint8Array([1, 2, 3]));
     mocks.upload.mockResolvedValue({ path: "deliveries/img.png" });
     mocks.remove.mockResolvedValue(undefined);
     mocks.createDelivery.mockResolvedValue({ id: "delivery-1" });
     mocks.updateDelivery.mockResolvedValue({});
-    mocks.sendMemo.mockResolvedValue({ ok: true, reason: null });
     mocks.enqueueAlimtalk.mockResolvedValue({ ok: true, id: "alim-1" });
     mocks.findNotification.mockResolvedValue(null);
     mocks.createNotification.mockResolvedValue({ id: "notif-1" });
@@ -166,7 +160,7 @@ describe("POST /api/quote/deliver", () => {
   });
 
   it("기능 플래그가 꺼져 있으면 전송 API도 비활성화한다", async () => {
-    vi.stubEnv("NEXT_PUBLIC_KAKAO_SYNC", "false");
+    vi.stubEnv("NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND", "false");
 
     const res = await POST(request());
 
@@ -226,15 +220,6 @@ describe("POST /api/quote/deliver", () => {
     expect(mocks.render).not.toHaveBeenCalled();
   });
 
-  it("토큰 재발급 실패는 409 + 재로그인 코드, 렌더링은 시작조차 안 한다", async () => {
-    mocks.getAccessToken.mockResolvedValue(null);
-    const res = await POST(request());
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ code: "KAKAO_REAUTH_REQUIRED" });
-    expect(mocks.render).not.toHaveBeenCalled();
-    expect(mocks.upload).not.toHaveBeenCalled();
-  });
-
   it("성공하면 업로드한 이미지를 보존 기간 동안 유지하며 발송하고 SENT 로 기록한다", async () => {
     const res = await POST(request());
 
@@ -242,11 +227,19 @@ describe("POST /api/quote/deliver", () => {
     expect(await res.json()).toEqual({ success: true, data: { deliveryId: "delivery-1" } });
 
     expect(mocks.upload).toHaveBeenCalledWith({ png: expect.any(Uint8Array) });
-    expect(mocks.sendMemo).toHaveBeenCalledWith(
-      {
-        accessToken: "access-token",
-        linkUrl: "https://imdealer.example/quote/delivery/delivery-1",
-      }
+    // 알림톡은 이미지를 못 붙이므로 견적서 열람 링크를 버튼으로 실어 보낸다.
+    expect(mocks.enqueueAlimtalk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateKey: "QUOTE_DELIVERED",
+        phone: "01012345678",
+        buttons: [
+          expect.objectContaining({
+            url_mobile: "https://imdealer.example/quote/delivery/delivery-1",
+          }),
+        ],
+        refType: "quote",
+        refId: "quote-1",
+      })
     );
     expect(mocks.render).toHaveBeenCalledWith(
       expect.objectContaining({ vehicleName: "서버 쏘렌토", userEmail: null })
@@ -257,6 +250,7 @@ describe("POST /api/quote/deliver", () => {
           userId: "user-1",
           savedQuoteId: "quote-1",
           imagePath: "deliveries/img.png",
+          channel: "alimtalk",
           status: "PENDING",
         }),
       })
@@ -288,8 +282,8 @@ describe("POST /api/quote/deliver", () => {
     expect(mocks.render).toHaveBeenCalledWith(officialImageData);
   });
 
-  it("카카오 발송 실패는 502 + FAILED 기록(사유 포함)", async () => {
-    mocks.sendMemo.mockResolvedValue({ ok: false, reason: "HTTP 403 insufficient scope" });
+  it("알림톡 적재 실패는 502 + FAILED 기록(사유 포함)", async () => {
+    mocks.enqueueAlimtalk.mockResolvedValue({ ok: false, reason: "invalid_phone" });
 
     const res = await POST(request());
 
@@ -301,7 +295,7 @@ describe("POST /api/quote/deliver", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: "FAILED",
-          failReason: "HTTP 403 insufficient scope",
+          failReason: "invalid_phone",
         }),
       })
     );
@@ -315,7 +309,7 @@ describe("POST /api/quote/deliver", () => {
 
     expect(res.status).toBe(500);
     expect(mocks.remove).toHaveBeenCalledWith("deliveries/img.png");
-    expect(mocks.sendMemo).not.toHaveBeenCalled();
+    expect(mocks.enqueueAlimtalk).not.toHaveBeenCalled();
   });
 
   it("업로드 실패는 500 이고 이력을 만들지 않는다", async () => {
@@ -325,10 +319,10 @@ describe("POST /api/quote/deliver", () => {
 
     expect(res.status).toBe(500);
     expect(mocks.createDelivery).not.toHaveBeenCalled();
-    expect(mocks.sendMemo).not.toHaveBeenCalled();
+    expect(mocks.enqueueAlimtalk).not.toHaveBeenCalled();
   });
 
-  it("카카오 이미지 제한인 5MB를 넘으면 업로드하지 않는다", async () => {
+  it("이미지 상한인 5MB를 넘으면 업로드하지 않는다", async () => {
     mocks.render.mockResolvedValue(new Uint8Array(5 * 1024 * 1024 + 1));
 
     const res = await POST(request());
@@ -336,16 +330,15 @@ describe("POST /api/quote/deliver", () => {
     expect(res.status).toBe(413);
     expect(mocks.upload).not.toHaveBeenCalled();
     expect(mocks.createDelivery).not.toHaveBeenCalled();
-    expect(mocks.sendMemo).not.toHaveBeenCalled();
+    expect(mocks.enqueueAlimtalk).not.toHaveBeenCalled();
   });
 
-  it("알림톡 적재가 실패해도 전달은 성공하고 어드민 알림을 남긴다", async () => {
+  it("알림톡 적재가 실패하면 어드민 알림을 남긴다", async () => {
     mocks.enqueueAlimtalk.mockResolvedValue({ ok: false, reason: "invalid_phone" });
 
     const res = await POST(request());
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ success: true, data: { deliveryId: "delivery-1" } });
+    expect(res.status).toBe(502);
     expect(mocks.createNotification).toHaveBeenCalledWith({
       data: expect.objectContaining({
         type: "SYSTEM",
@@ -360,12 +353,12 @@ describe("POST /api/quote/deliver", () => {
     expect(payload.content).not.toContain("01012345678");
   });
 
-  it("알림톡 적재 예외도 전달 응답을 바꾸지 않고 어드민 알림을 남긴다", async () => {
+  it("알림톡 적재 예외도 502 로 끊고 어드민 알림을 남긴다", async () => {
     mocks.enqueueAlimtalk.mockRejectedValue(new Error("alimtalk table unavailable"));
 
     const res = await POST(request());
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(502);
     expect(mocks.createNotification).toHaveBeenCalledWith({
       data: expect.objectContaining({
         type: "SYSTEM",
@@ -375,13 +368,20 @@ describe("POST /api/quote/deliver", () => {
     });
   });
 
-  it("알림톡이 꺼져 있으면 적재 실패 알림을 만들지 않는다", async () => {
+  // 알림톡이 유일한 발송 경로이므로, 스위치가 꺼져 있는 것도 조용히 넘길 수 없는 설정 사고다.
+  it("알림톡이 꺼져 있으면 502 + 적재 실패 알림을 남긴다", async () => {
     mocks.enqueueAlimtalk.mockResolvedValue({ ok: false, reason: "disabled" });
 
     const res = await POST(request());
 
-    expect(res.status).toBe(200);
-    expect(mocks.createNotification).not.toHaveBeenCalled();
+    expect(res.status).toBe(502);
+    expect(mocks.createNotification).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "SYSTEM",
+        title: "알림톡 적재 실패",
+        linkUrl: "/admin/quotations?id=quote-1&notice=alimtalk-enqueue",
+      }),
+    });
   });
 
   it("같은 견적의 알림톡 적재 실패 알림은 재시도해도 한 건만 만든다", async () => {
@@ -393,8 +393,8 @@ describe("POST /api/quote/deliver", () => {
     const first = await POST(request());
     const second = await POST(request());
 
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
+    expect(first.status).toBe(502);
+    expect(second.status).toBe(502);
     expect(mocks.createNotification).toHaveBeenCalledTimes(1);
     expect(mocks.findNotification).toHaveBeenCalledWith({
       where: {
@@ -405,17 +405,16 @@ describe("POST /api/quote/deliver", () => {
     });
   });
 
-  it("알림 생성이 실패해도 견적서 전달 성공 응답은 유지한다", async () => {
+  it("알림 생성이 실패해도 적재 실패 응답(502)은 그대로 내려간다", async () => {
     mocks.enqueueAlimtalk.mockResolvedValue({ ok: false, reason: "invalid_phone" });
     mocks.createNotification.mockRejectedValue(new Error("notification insert failed"));
 
     const res = await POST(request());
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ success: true, data: { deliveryId: "delivery-1" } });
+    expect(res.status).toBe(502);
   });
 
-  it("memo 성공 후 SENT 기록이 실패하면 같은 mark-failed 경로로 FAILED 를 남긴다", async () => {
+  it("적재 성공 후 SENT 기록이 실패하면 같은 mark-failed 경로로 FAILED 를 남긴다", async () => {
     mocks.updateDelivery
       .mockRejectedValueOnce(new Error("sent write failed"))
       .mockResolvedValueOnce({});
@@ -423,7 +422,7 @@ describe("POST /api/quote/deliver", () => {
     const res = await POST(request());
 
     expect(res.status).toBe(500);
-    expect(mocks.sendMemo).toHaveBeenCalledTimes(1);
+    expect(mocks.enqueueAlimtalk).toHaveBeenCalledTimes(1);
     expect(mocks.updateDelivery).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -442,15 +441,14 @@ describe("POST /api/quote/deliver", () => {
       })
     );
     expect(mocks.remove).not.toHaveBeenCalled();
-    expect(mocks.enqueueAlimtalk).not.toHaveBeenCalled();
   });
 
-  it("카카오 발송 실패 시 견적 상세로 연결되는 어드민 알림을 남긴다", async () => {
-    mocks.sendMemo.mockResolvedValue({ ok: false, reason: "HTTP 403 insufficient scope" });
+  it("예기치 못한 실패는 견적 상세로 연결되는 어드민 알림을 남긴다", async () => {
+    mocks.upload.mockRejectedValue(new Error("bucket not found"));
 
     const res = await POST(request());
 
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(500);
     expect(mocks.createNotification).toHaveBeenCalledWith({
       data: expect.objectContaining({
         type: "SYSTEM",

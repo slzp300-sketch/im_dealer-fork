@@ -1,8 +1,12 @@
-// 견적서를 회원 본인의 카카오톡으로 전송한다.
-// 흐름: 인증 → 액세스 토큰 재발급 → PNG 생성 → Storage 업로드 → 카카오 발송 → 이력 기록.
+// 견적서를 회원의 카카오톡으로 전송한다.
+// 흐름: 인증 → PNG 생성 → Storage 업로드 → 알림톡 큐 적재 → 이력 기록.
 //
-// 토큰 재발급 실패(리프레시 만료·연결끊기·미동의)는 409 로 구분해서 내려준다.
-// 클라이언트가 이걸 보고 "다시 로그인하고 받기"를 안내한다.
+// 발송 주체는 아임딜러 카카오 채널(알림톡)이다. 알림톡은 이미지를 첨부할 수 없으므로
+// 본문에 견적 요약을, 버튼에 견적서 열람 링크를 담아 보낸다 — 업로드한 PNG 는 그 링크가
+// 여는 페이지에서 쓰인다.
+//
+// 실제 발송은 고정 IP 릴레이(scripts/biztalk-relay)가 큐를 클레임해서 수행하므로
+// 여기서 성공은 "적재 완료"까지를 뜻한다. 도달 결과는 AlimtalkMessage 가 추적한다.
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -11,11 +15,8 @@ import { requireActiveUser } from "@/lib/require-user";
 import { renderQuoteImageBuffer } from "@/lib/quote-image/render-quote-image";
 import { buildOfficialDeliveryImageData } from "@/lib/quote-delivery/official-image";
 import { deleteQuoteImage, uploadQuoteImage } from "@/lib/quote-delivery/store";
-import { getKakaoAccessToken } from "@/lib/kakao/token";
-import { sendQuoteMemo } from "@/lib/kakao/memo";
-import { isKakaoSyncEnabled } from "@/lib/kakao/scopes";
 import { strictRateLimit, checkRateLimit } from "@/lib/rate-limit";
-import { enqueueAlimtalk } from "@/lib/alimtalk/enqueue";
+import { enqueueAlimtalk, type EnqueueAlimtalkResult } from "@/lib/alimtalk/enqueue";
 import {
   buildQuoteDeliveredButtons,
   buildQuoteDeliveredMessage,
@@ -28,15 +29,21 @@ import type { PDFQuoteData } from "@/lib/quote-pdf-template";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-const KAKAO_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+// Storage 로 올릴 PNG 상한. 열람 페이지가 감당할 수 있는 크기로 제한한다.
+const QUOTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
 const deliveryMetadataSchema = z.object({
   savedQuoteId: z.string().trim().min(1).max(200),
   sessionId: z.string().trim().min(1).max(200),
 });
 
+/** 견적 페이지의 자동발송 스위치와 같은 값을 서버에서도 본다. */
+function isQuoteAutoSendEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND === "true";
+}
+
 export async function POST(req: NextRequest) {
-  if (!isKakaoSyncEnabled()) {
+  if (!isQuoteAutoSendEnabled()) {
     return NextResponse.json({ error: "사용할 수 없는 기능입니다." }, { status: 404 });
   }
 
@@ -100,14 +107,6 @@ export async function POST(req: NextRequest) {
   }
   const imageData = imageResult.data;
 
-  const accessToken = await getKakaoAccessToken(user.supabaseId);
-  if (!accessToken) {
-    return NextResponse.json(
-      { error: "카카오톡 전송 권한이 만료되었습니다. 다시 로그인해 주세요.", code: "KAKAO_REAUTH_REQUIRED" },
-      { status: 409 }
-    );
-  }
-
   const appOrigin = getConfiguredAppOrigin();
   if (!appOrigin) {
     return NextResponse.json({ error: "견적서 전송 설정을 확인해 주세요." }, { status: 500 });
@@ -115,10 +114,10 @@ export async function POST(req: NextRequest) {
 
   let delivery: { id: string } | null = null;
   let uploadedPath: string | null = null;
-  let memoDelivered = false;
+  let alimtalkQueued = false;
   try {
     const png = await renderQuoteImageBuffer(imageData);
-    if (png.byteLength > KAKAO_IMAGE_MAX_BYTES) {
+    if (png.byteLength > QUOTE_IMAGE_MAX_BYTES) {
       return NextResponse.json(
         { error: "견적서 이미지가 전송 가능한 크기를 초과했습니다." },
         { status: 413 }
@@ -133,44 +132,31 @@ export async function POST(req: NextRequest) {
         savedQuoteId: savedQuote.id,
         vehicleName: imageData.vehicleName,
         imagePath: path,
-        channel: "memo",
+        channel: "alimtalk",
         status: "PENDING",
       },
       select: { id: true },
     });
 
-    const result = await sendQuoteMemo({
-      accessToken,
+    const queued = await enqueueQuoteAlimtalk({
+      user,
+      imageData,
       linkUrl: quoteLinkUrl(appOrigin, delivery.id),
+      savedQuoteId: savedQuote.id,
     });
 
-    if (!result.ok) {
-      const reason = result.reason?.slice(0, 500) ?? "unknown";
-      await markDeliveryFailed(delivery.id, reason);
+    if (!queued.ok) {
+      await markDeliveryFailed(delivery.id, queued.reason);
       await removeUploadedQuote(path);
-      console.error("[quote/deliver] kakao send failed:", result.reason);
-      await notifyQuoteDeliverFailed({
-        savedQuoteId: savedQuote.id,
-        vehicleName: imageData.vehicleName,
-      });
       return NextResponse.json(
         { error: "카카오톡 전송에 실패했습니다. 다시 시도하거나 상담하기를 이용해 주세요." },
         { status: 502 }
       );
     }
 
-    memoDelivered = true;
+    alimtalkQueued = true;
+    // 적재 완료 = 발송 요청 완료. 실제 도달 결과는 AlimtalkMessage 쪽에 남는다.
     await markDeliverySent(delivery.id);
-
-    // 알림톡은 "나에게 보내기"의 대체가 아니라 보강이다. 회원이 카톡을 안 켜도
-    // 전화번호만 있으면 도달하므로 같은 링크를 한 번 더 밀어준다.
-    // 실패해도 견적서 전송 자체는 이미 성공했으므로 응답에 영향을 주지 않는다.
-    await enqueueQuoteAlimtalk({
-      user,
-      imageData,
-      linkUrl: quoteLinkUrl(appOrigin, delivery.id),
-      savedQuoteId: savedQuote.id,
-    });
 
     return NextResponse.json({ success: true, data: { deliveryId: delivery.id } });
   } catch (error) {
@@ -179,7 +165,7 @@ export async function POST(req: NextRequest) {
     if (delivery) {
       await markDeliveryFailed(delivery.id, error.message.slice(0, 500));
     }
-    if (uploadedPath && !memoDelivered) await removeUploadedQuote(uploadedPath);
+    if (uploadedPath && !alimtalkQueued) await removeUploadedQuote(uploadedPath);
     await notifyQuoteDeliverFailed({
       savedQuoteId: savedQuote.id,
       vehicleName: imageData.vehicleName,
@@ -211,12 +197,13 @@ async function enqueueQuoteAlimtalk(params: {
   imageData: PDFQuoteData;
   linkUrl: string;
   savedQuoteId: string;
-}): Promise<void> {
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
   const { user, imageData, linkUrl, savedQuoteId } = params;
   const scenario = imageData.scenarios[imageData.scenarioType ?? "standard"];
 
+  let result: EnqueueAlimtalkResult;
   try {
-    const result = await enqueueAlimtalk({
+    result = await enqueueAlimtalk({
       templateKey: "QUOTE_DELIVERED",
       phone: user.phone,
       message: buildQuoteDeliveredMessage({
@@ -235,14 +222,6 @@ async function enqueueQuoteAlimtalk(params: {
       refType: "quote",
       refId: savedQuoteId,
     });
-    if (!result.ok && result.reason !== "disabled") {
-      console.warn(`[quote/deliver] 알림톡 적재 건너뜀: ${result.reason}`);
-      await notifyAlimtalkEnqueueFailed({
-        savedQuoteId,
-        vehicleName: imageData.vehicleName,
-        reason: result.reason,
-      });
-    }
   } catch (error) {
     if (!(error instanceof Error)) throw error;
     console.error("[quote/deliver] 알림톡 적재 실패:", error);
@@ -251,7 +230,22 @@ async function enqueueQuoteAlimtalk(params: {
       vehicleName: imageData.vehicleName,
       reason: "error",
     });
+    return { ok: false, reason: "error" };
   }
+
+  // 알림톡이 유일한 발송 경로다 — 적재에 실패하면 고객에게 아무것도 가지 않으므로
+  // 설정 누락("disabled")까지 포함해 전부 알린다.
+  if (!result.ok) {
+    console.warn(`[quote/deliver] 알림톡 적재 건너뜀: ${result.reason}`);
+    await notifyAlimtalkEnqueueFailed({
+      savedQuoteId,
+      vehicleName: imageData.vehicleName,
+      reason: result.reason,
+    });
+    return { ok: false, reason: result.reason };
+  }
+
+  return { ok: true };
 }
 
 async function markDeliverySent(deliveryId: string): Promise<void> {
