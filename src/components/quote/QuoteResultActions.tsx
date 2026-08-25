@@ -138,7 +138,7 @@ export function QuoteResultDeliveryBar({
               className="flex items-start gap-2 rounded-[12px] border border-brand/20 bg-brand-soft p-3 text-[12px] font-semibold text-brand"
             >
               <CheckCircle2 aria-hidden="true" size={14} className="mt-0.5 shrink-0" />
-              카카오톡으로 견적서를 보냈어요. 나와의 채팅에서 확인해 주세요.
+              카카오톡으로 견적서를 보냈어요. 아임딜러 채널 알림톡에서 확인해 주세요.
             </p>
           )
         ) : null}

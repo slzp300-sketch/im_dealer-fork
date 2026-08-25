@@ -407,11 +407,12 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
     useState<ChannelTalkQuoteContext | null>(null);
   // 로그인 게이트 — 견적서 수령 / 초기비용 변경. 비회원이 눌렀을 때 노출한다.
   const [loginGate, setLoginGate] = useState<"delivery" | "initialCost" | null>(null);
-  // 카카오톡 '나에게 보내기' 자동발송은 카카오싱크 + 명시적 자동발송 플래그가 모두 켜졌을 때만.
-  // (KAKAO_SYNC 는 간편가입 로그인용이라, 자동발송과는 분리한다.)
+  // 아임딜러 채널 알림톡 자동발송은 카카오싱크 + 명시적 자동발송 플래그가 모두 켜졌을 때만.
+  // (KAKAO_SYNC 는 간편가입 로그인용이라, 자동발송과는 분리한다. 다만 견적서 수령은
+  //  회원 전용이고 로그인이 카카오싱크라 실질적으로 함께 켜져 있어야 한다.)
   const kakaoDeliveryEnabled =
     isKakaoSyncEnabled() && process.env.NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND === "true";
-  // 비즈톡 자동발송 전 기본 임시방편: '견적서 받기' → 카카오 채널추가 유도 →
+  // 자동발송 전 임시방편: '견적서 받기' → 카카오 채널추가 유도 →
   // 채널톡(↔카카오 채널 통합)으로 상담사가 확인 후 견적서를 수동 발송한다.
   const channelTalkDelivery = !kakaoDeliveryEnabled;
   const baseStandardScenario = useRef<QuoteScenarioDetail | null>(null);

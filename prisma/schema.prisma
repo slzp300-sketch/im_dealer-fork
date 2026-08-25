@@ -720,7 +720,7 @@ model QuoteDelivery {
   savedQuoteId  String? // 전송 시점의 SavedQuote (없을 수도 있어 nullable)
   vehicleName   String
   imagePath     String // Storage 경로 (PNG)
-  channel       String    @default("memo") // "memo"(나에게 보내기) | "friendtalk"
+  channel       String    @default("memo") // "alimtalk"(채널 알림톡) | "memo"(구 나에게 보내기)
   status        String    @default("PENDING") // PENDING | SENT | FAILED
   failReason    String?
   sentAt        DateTime?
