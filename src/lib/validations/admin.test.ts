@@ -4,6 +4,7 @@ import {
   inventoryUpdateSchema,
   aiConfigMutationSchema,
   popularConfigCreateSchema,
+  catalogScrapeSummarySchema,
 } from "./admin";
 import { compileOverlapCatalog } from "@/lib/recommend/overlap-catalog";
 
@@ -108,6 +109,32 @@ describe("aiConfigMutationSchema", () => {
     expect(
       aiConfigMutationSchema.safeParse({ action: "create", vehicleId: "vehicle", profile, isActive: true, highlights: tooMany }).success
     ).toBe(false);
+  });
+});
+
+describe("catalogScrapeSummarySchema", () => {
+  const base = {
+    mode: "catalog" as const,
+    total: 12,
+    skipped: 0,
+    failed: 12,
+    brands: [{ brandCd: "K", name: "기아", trims: 12 }],
+    finishedAt: "2026-08-25T01:30:00.000Z",
+  };
+
+  it("preserves failures through parse (zod strips undeclared keys)", () => {
+    const parsed = catalogScrapeSummarySchema.parse({
+      ...base,
+      failures: [{ label: "셀토스 시그니처", reason: "월납입금 산출 0건" }],
+    });
+    expect(parsed.failures).toEqual([
+      { label: "셀토스 시그니처", reason: "월납입금 산출 0건" },
+    ]);
+  });
+
+  it("accepts old-worker payloads without failures", () => {
+    const parsed = catalogScrapeSummarySchema.parse(base);
+    expect(parsed.failures).toBeUndefined();
   });
 });
 

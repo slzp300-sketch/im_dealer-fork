@@ -333,6 +333,9 @@ export const catalogScrapeSummarySchema = z.object({
   models: z
     .array(z.object({ brandName: z.string(), modelName: z.string(), trims: z.number().int().min(0) }))
     .optional(),
+  // 실패 내역(무엇이 왜) — 어댑터가 상한 30건까지 동봉. 스키마에 없으면 zod 가
+  // 조용히 제거해 완료 카드에 표시되지 않으므로 반드시 여기 선언해야 한다.
+  failures: z.array(z.object({ label: z.string(), reason: z.string() })).optional(),
   finishedAt: z.string(),
 });
 
