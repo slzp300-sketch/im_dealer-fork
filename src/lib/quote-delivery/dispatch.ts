@@ -106,6 +106,7 @@ async function dispatchQuoteDelivery(
       링크: linkUrl,
     }),
     buttons: buildQuoteDeliveredButtons(linkUrl),
+    price: scenario.monthlyPayment ?? null,
     userId: delivery.user.id,
     refType: "quote",
     refId: delivery.savedQuoteId,
