@@ -199,6 +199,17 @@ describe("POST /api/quote/deliver", () => {
       expect(body.data.requestCode).toMatch(/^[2-9A-HJ-NP-Z]{6}$/);
     });
 
+    // 이 조합이면 화면은 "전송 완료"인데 아무것도 안 나간다. 자동발송을 우선한다.
+    it("자동발송이 켜져 있으면 대기 모드를 무시하고 그대로 보낸다", async () => {
+      vi.stubEnv("NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND", "true");
+
+      const res = await POST(request());
+      const body = await res.json();
+
+      expect(mocks.enqueueAlimtalk).toHaveBeenCalled();
+      expect(body.data.requestCode).toBeUndefined();
+    });
+
     it("발송 전이므로 AWAITING_MESSAGE 로 남긴다", async () => {
       await POST(request());
 
