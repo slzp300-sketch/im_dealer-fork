@@ -79,17 +79,20 @@ export async function POST(request: NextRequest) {
   }
 
   const type = (body as { type?: unknown } | null)?.type;
-  if (typeof type === "string" && type !== "Message" && type !== "UserChat") {
-    return NextResponse.json({ ok: true, skipped: "other_type" });
-  }
-
   const text = extractMessageText(body);
   const requestCode = extractQuoteRequestCode(text);
+
   // 채널톡 payload 규격을 확인하기 전이라, 실제로 무엇이 오는지 볼 수 있어야 한다.
+  // 어떤 이벤트든 일단 남긴다 — 걸러낸 뒤에 찍으면 예상 밖 이벤트가 조용히 사라진다.
   // 고객이 쓴 내용은 남기지 않고 구조만 남긴다.
   console.log(
     `[channel-talk webhook] type=${String(type)} entityKeys=${entityKeys(body).join(",")} textLen=${text.length} code=${requestCode ? "found" : "none"}`
   );
+
+  // 콘솔에서 고르는 이벤트 이름과 payload 의 type 표기가 다를 수 있어 느슨하게 본다.
+  if (typeof type === "string" && !/message|chat/i.test(type)) {
+    return NextResponse.json({ ok: true, skipped: "other_type" });
+  }
 
   if (!requestCode) {
     // 요청번호 없는 일반 문의가 대부분이다. 상담은 이미 열렸고 상담사가 이어받는다.
