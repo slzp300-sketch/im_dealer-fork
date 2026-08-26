@@ -51,6 +51,8 @@ describe("getAlimtalkQueueStatus", () => {
     const select = mocks.findMany.mock.calls[0][0].select as Record<string, unknown>;
     expect(Object.keys(select)).not.toContain("recipient");
     expect(Object.keys(select)).not.toContain("message");
+    // 3015(템플릿 없음) 는 이 값 없이는 화면만 보고 원인을 못 잡는다.
+    expect(Object.keys(select)).toContain("templateCode");
     expect(mocks.findMany.mock.calls[0][0].where).toEqual({ status: "FAILED" });
   });
 
@@ -60,6 +62,7 @@ describe("getAlimtalkQueueStatus", () => {
       {
         id: "alim-1",
         templateKey: "QUOTE_DELIVERED",
+        templateCode: "imdealer_quote_delivered",
         refType: "quote",
         refId: "ck8qz1x2y3w4v5",
         failReason: "3019 톡 유저 아님",
@@ -72,6 +75,7 @@ describe("getAlimtalkQueueStatus", () => {
       {
         id: "alim-2",
         templateKey: "REVIEW_REQUEST",
+        templateCode: "imdealer_review_request",
         refType: null,
         refId: null,
         failReason: null,
@@ -87,6 +91,7 @@ describe("getAlimtalkQueueStatus", () => {
 
     expect(status.recentFailures[0]).toMatchObject({
       id: "alim-1",
+      templateCode: "imdealer_quote_delivered",
       failedAt: "2026-08-19T08:57:00.000Z",
       createdAt: "2026-08-19T08:55:00.000Z",
     });

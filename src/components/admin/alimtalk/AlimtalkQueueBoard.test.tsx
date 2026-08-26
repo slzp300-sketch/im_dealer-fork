@@ -19,6 +19,7 @@ function failure(overrides: Record<string, unknown> = {}) {
   return {
     id: "alim-1",
     templateKey: "QUOTE_DELIVERED",
+    templateCode: "imdealer_quote_delivered",
     refType: "quote",
     refId: "ck8qz1x2y3w4v5",
     failReason: "3019 카카오톡 미가입 사용자",
@@ -81,6 +82,7 @@ describe("AlimtalkQueueBoard", () => {
             failure({
               id: "alim-2",
               templateKey: "REVIEW_REQUEST",
+              templateCode: "imdealer_review_request",
               refType: "review",
               refId: "ck_review_99",
               failReason: null,
@@ -101,9 +103,11 @@ describe("AlimtalkQueueBoard", () => {
     // 구분 라벨
     expect(screen.getByText("견적")).toBeInTheDocument();
     expect(screen.getByText("리뷰")).toBeInTheDocument();
-    // 템플릿 키
+    // 템플릿 키 + 비즈톡 템플릿 코드(3015 진단에 필요)
     expect(screen.getByText("QUOTE_DELIVERED")).toBeInTheDocument();
     expect(screen.getByText("REVIEW_REQUEST")).toBeInTheDocument();
+    expect(screen.getByText("imdealer_quote_delivered")).toBeInTheDocument();
+    expect(screen.getByText("imdealer_review_request")).toBeInTheDocument();
     // 시도 횟수
     expect(screen.getByText("3회")).toBeInTheDocument();
     expect(screen.getByText("1회")).toBeInTheDocument();

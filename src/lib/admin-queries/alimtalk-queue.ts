@@ -20,6 +20,8 @@ export type AlimtalkQueueCounts = Record<AlimtalkStatus, number>;
 export interface AlimtalkFailedItem {
   id: string;
   templateKey: string;
+  /** 비즈톡센터에 등록된 템플릿 코드. 3015(템플릿 없음) 진단에 이 값이 필요하다. */
+  templateCode: string;
   /** "quote" | "consult" | "review" — 스키마가 자유 문자열이라 null 가능 */
   refType: string | null;
   refId: string | null;
@@ -62,6 +64,7 @@ export async function getAlimtalkQueueStatus(): Promise<AlimtalkQueueStatus> {
       select: {
         id: true,
         templateKey: true,
+        templateCode: true,
         refType: true,
         refId: true,
         failReason: true,
@@ -95,6 +98,7 @@ export async function getAlimtalkQueueStatus(): Promise<AlimtalkQueueStatus> {
     recentFailures: failedRows.map((row) => ({
       id: row.id,
       templateKey: row.templateKey,
+      templateCode: row.templateCode,
       refType: row.refType,
       refId: row.refId,
       failReason: row.failReason,

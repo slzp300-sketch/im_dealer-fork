@@ -145,6 +145,7 @@ export function AlimtalkQueueBoard({ status }: { status: AlimtalkQueueStatus }) 
                     </td>
                     <td className="px-3 py-2.5 align-top text-[#1A1A2E] font-mono text-[11px]">
                       {item.templateKey}
+                      <div className="text-[#9BA4C0] break-all">{item.templateCode}</div>
                     </td>
                     <td className="px-3 py-2.5 align-top text-[#1A1A2E] break-words max-w-[320px]">
                       {failureReason(item)}

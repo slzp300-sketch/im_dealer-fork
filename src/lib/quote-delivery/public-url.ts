@@ -9,3 +9,12 @@ export function quoteImagePublicUrl(path: string): string {
   const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
   return `${base}/storage/v1/object/public/${QUOTE_IMAGE_BUCKET}/${path}`;
 }
+
+// 스토리지는 앱과 다른 오리진이라 <a download> 속성이 무시된다. 저장으로 받게 하려면
+// ?download= 로 Content-Disposition 을 받아야 한다. 값이 응답 헤더에 그대로 실리므로
+// 파일명은 ASCII 로 유지한다(한글을 넣으면 브라우저에서 깨진 이름으로 저장된다).
+export const QUOTE_IMAGE_DOWNLOAD_FILENAME = "imdealer-quote.png";
+
+export function quoteImageDownloadUrl(path: string): string {
+  return `${quoteImagePublicUrl(path)}?download=${QUOTE_IMAGE_DOWNLOAD_FILENAME}`;
+}
