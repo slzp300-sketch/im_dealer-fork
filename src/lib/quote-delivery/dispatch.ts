@@ -47,11 +47,23 @@ function quoteLinkUrl(deliveryId: string): string | null {
   }
 }
 
-export async function dispatchQuoteDeliveryByRequestCode(
+/** 웹훅 경로 — 고객이 보낸 메시지에서 읽어낸 요청번호로 찾는다. */
+export function dispatchQuoteDeliveryByRequestCode(
   requestCode: string
 ): Promise<DispatchResult> {
+  return dispatchQuoteDelivery({ requestCode });
+}
+
+/** 어드민 수동 발송 — 고객이 요청번호를 빼고 보낸 건을 상담사가 직접 내보낸다. */
+export function dispatchQuoteDeliveryById(deliveryId: string): Promise<DispatchResult> {
+  return dispatchQuoteDelivery({ id: deliveryId });
+}
+
+async function dispatchQuoteDelivery(
+  where: { requestCode: string } | { id: string }
+): Promise<DispatchResult> {
   const delivery = await prisma.quoteDelivery.findUnique({
-    where: { requestCode },
+    where,
     select: {
       id: true,
       status: true,
