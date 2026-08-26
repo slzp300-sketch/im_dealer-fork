@@ -46,6 +46,7 @@ import {
   type ChannelTalkQuoteContext,
 } from "@/lib/channel-talk";
 import { kakaoChannelChatUrl } from "@/lib/kakao/channel-add";
+import { REQUEST_CODE_LABEL } from "@/lib/quote-delivery/request-code";
 import { QuoteDeliveryGuideModal } from "@/components/quote/QuoteDeliveryGuideModal";
 import { LoginBenefitsModal } from "@/components/quote/LoginBenefitsModal";
 import { QuoteDeliveryLoginModal } from "@/components/quote/QuoteDeliveryLoginModal";
@@ -211,6 +212,11 @@ function syncQuoteResultHistory(vehicleSlug: string, customerType: CustomerType)
 const apiErrorSchema = z.object({
   error: z.string().optional(),
   code: z.string().optional(),
+});
+
+// 대기 모드 응답. requestCode 가 없으면 기존(수동 발송) 흐름으로 취급한다.
+const quotePreparedSchema = z.object({
+  data: z.object({ requestCode: z.string().min(1).nullish() }),
 });
 
 // 상담 필요 결과는 scenarios 가 빈 객체일 수 있어 옵셔널 접근으로 판별한다.
@@ -1217,12 +1223,17 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
       trackQuoteDeliveryRequested(deliveryContext);
       setDeliveryTrackContext(deliveryContext);
 
+      // 견적서 PNG·열람 링크·요청번호를 미리 만들어 둔다. 발송은 고객이 이 요청번호를
+      // 카카오 채널로 보낸 뒤 채널톡 웹훅이 시작한다 — 상담이 먼저 열리게 하려는 것이다.
+      const requestCode = await prepareQuoteDelivery(savedQuote);
+
       // 채널 대화창은 메시지 프리필이 불가하므로, 견적 정보가 담긴 요청 메시지를
       // 클립보드에 복사해 고객이 대화창에 붙여넣고 보내도록 유도한다(상담사가 견적 파악).
       const requestSubject = [vehicleName, quoteResult.trimName].filter(Boolean).join(" ");
       const deliveryMessage =
         `[견적서 요청] ${requestSubject}\n` +
         `${productTypeLabel(contractCategory)} · ${quoteResult.contractMonths}개월 · 연 ${quoteResult.annualMileage.toLocaleString()}km\n` +
+        (requestCode ? `${REQUEST_CODE_LABEL} ${requestCode}\n` : "") +
         `견적서 보내주세요.`;
       try {
         await navigator.clipboard?.writeText(deliveryMessage);
@@ -1240,6 +1251,36 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
       );
     } finally {
       setIsDelivering(false);
+    }
+  }
+
+  /**
+   * 대기 모드에서 발급되는 요청번호를 받아온다. 이 번호가 있어야 고객이 보낸 메시지와
+   * 견적서를 이을 수 있다. 대기 모드가 꺼져 있으면 서버가 번호를 주지 않으므로,
+   * 기존처럼 상담사가 수동으로 보내는 흐름 그대로 진행한다.
+   */
+  async function prepareQuoteDelivery(savedQuote: {
+    id: string;
+    sessionId: string;
+  }): Promise<string | null> {
+    try {
+      const response = await fetch("/api/quote/deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          savedQuoteId: savedQuote.id,
+          sessionId: savedQuote.sessionId,
+        }),
+      });
+      if (!response.ok) return null;
+      const payload: unknown = await response.json().catch(() => null);
+      const parsed = quotePreparedSchema.safeParse(payload);
+      return parsed.success ? (parsed.data.data.requestCode ?? null) : null;
+    } catch (prepareError) {
+      if (!(prepareError instanceof Error)) throw prepareError;
+      // 준비에 실패해도 상담 자체는 열려야 한다 — 상담사가 수동으로 보낼 수 있다.
+      console.error("[quote] 견적서 준비 실패:", prepareError);
+      return null;
     }
   }
 

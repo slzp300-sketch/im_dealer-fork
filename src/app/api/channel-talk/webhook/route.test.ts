@@ -1,0 +1,123 @@
+import { NextRequest } from "next/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ dispatch: vi.fn() }));
+
+vi.mock("@/lib/quote-delivery/dispatch", () => ({
+  dispatchQuoteDeliveryByRequestCode: mocks.dispatch,
+}));
+
+import { extractMessageText, POST } from "./route";
+
+const TOKEN = "webhook-token";
+
+function webhookRequest(body: unknown, token: string | null = TOKEN) {
+  const url = token
+    ? `http://localhost/api/channel-talk/webhook?token=${token}`
+    : "http://localhost/api/channel-talk/webhook";
+  return new NextRequest(url, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+const messageBody = (plainText: string) => ({
+  event: "push",
+  type: "Message",
+  entity: { plainText },
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv("CHANNEL_TALK_WEBHOOK_TOKEN", TOKEN);
+  mocks.dispatch.mockResolvedValue({ ok: true, deliveryId: "delivery-1" });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("POST /api/channel-talk/webhook", () => {
+  // 이 라우트를 아무나 때리면 남의 견적서가 나간다.
+  it("토큰이 틀리면 401 이고 발송하지 않는다", async () => {
+    const res = await POST(webhookRequest(messageBody("요청번호 AB23CD"), "wrong"));
+
+    expect(res.status).toBe(401);
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("토큰이 없으면 401", async () => {
+    const res = await POST(webhookRequest(messageBody("요청번호 AB23CD"), null));
+
+    expect(res.status).toBe(401);
+  });
+
+  it("서버에 토큰이 설정돼 있지 않으면 열어주지 않는다", async () => {
+    vi.stubEnv("CHANNEL_TALK_WEBHOOK_TOKEN", "");
+
+    const res = await POST(webhookRequest(messageBody("요청번호 AB23CD")));
+
+    expect(res.status).toBe(401);
+  });
+
+  it("요청번호를 찾으면 발송한다", async () => {
+    const res = await POST(webhookRequest(messageBody("요청번호 AB23CD 견적서 보내주세요")));
+
+    expect(res.status).toBe(200);
+    expect(mocks.dispatch).toHaveBeenCalledWith("AB23CD");
+  });
+
+  // 요청번호 없는 일반 문의가 대부분이다 — 상담만 열리고 끝나야 한다.
+  it("요청번호가 없으면 아무것도 보내지 않는다", async () => {
+    const res = await POST(webhookRequest(messageBody("안녕하세요 상담 가능한가요")));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ skipped: "no_request_code" });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("이미 보낸 건은 다시 보내지 않는다", async () => {
+    mocks.dispatch.mockResolvedValue({ ok: false, reason: "already_sent" });
+
+    const res = await POST(webhookRequest(messageBody("요청번호 AB23CD")));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ skipped: "already_sent" });
+  });
+
+  // 500 을 돌려주면 채널톡이 재시도를 반복한다. 누락은 어드민 수동 발송으로 회수한다.
+  it("발송 중 오류가 나도 200 으로 닫는다", async () => {
+    mocks.dispatch.mockRejectedValue(new Error("boom"));
+
+    const res = await POST(webhookRequest(messageBody("요청번호 AB23CD")));
+
+    expect(res.status).toBe(200);
+  });
+
+  it("Message·UserChat 이 아닌 이벤트는 무시한다", async () => {
+    const res = await POST(
+      webhookRequest({ type: "User", entity: { plainText: "요청번호 AB23CD" } })
+    );
+
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(await res.json()).toMatchObject({ skipped: "other_type" });
+  });
+});
+
+describe("extractMessageText", () => {
+  it("plainText 를 먼저 본다", () => {
+    expect(extractMessageText({ entity: { plainText: "안녕" } })).toBe("안녕");
+  });
+
+  // 채널톡 문서에 payload 예시가 없어 필드명을 단정할 수 없다.
+  it("알려진 필드가 없으면 entity 안의 문자열을 모아 훑는다", () => {
+    const body = { entity: { blocks: [{ type: "text", value: "요청번호 AB23CD" }] } };
+
+    expect(extractMessageText(body)).toContain("요청번호 AB23CD");
+  });
+
+  it("entity 가 없으면 빈 문자열", () => {
+    expect(extractMessageText({ type: "Message" })).toBe("");
+    expect(extractMessageText(null)).toBe("");
+  });
+});
