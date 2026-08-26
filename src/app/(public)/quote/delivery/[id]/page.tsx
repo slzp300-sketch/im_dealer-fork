@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowRight, Clock, Download, FileImage, ZoomIn } from "lucide-react";
+import { QuoteDeliveryConsultButton } from "@/components/quote/QuoteDeliveryConsultButton";
 import { prisma } from "@/lib/prisma";
 import {
   quoteImageDownloadUrl,
@@ -176,6 +177,11 @@ export default async function QuoteDeliveryPage({ params }: QuoteDeliveryPagePro
             이미지 저장
           </a>
         </div>
+
+        <QuoteDeliveryConsultButton
+          vehicleName={view.delivery.vehicleName}
+          deliveryId={view.delivery.id}
+        />
 
         <p className="mt-4 break-keep text-center text-[13px] leading-relaxed text-text-muted">
           실제 계약 조건과 프로모션에 따라 최종 금액이 달라질 수 있습니다.
