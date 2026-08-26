@@ -218,6 +218,7 @@ async function enqueueQuoteAlimtalk(params: {
         링크: linkUrl,
       }),
       buttons: buildQuoteDeliveredButtons(linkUrl),
+      price: scenario.monthlyPayment ?? null,
       userId: user.id,
       refType: "quote",
       refId: savedQuoteId,

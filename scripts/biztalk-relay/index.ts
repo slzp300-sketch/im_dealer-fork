@@ -78,6 +78,7 @@ async function sendLoop(): Promise<void> {
             recipient: message.recipient,
             message: message.message,
             buttons: message.buttons,
+            price: message.price,
           });
           reports.push({
             id: message.id,

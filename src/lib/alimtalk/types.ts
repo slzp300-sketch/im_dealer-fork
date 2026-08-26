@@ -27,6 +27,8 @@ export interface AlimtalkClaimedMessage {
   recipient: string;
   message: string;
   buttons: AlimtalkButton[];
+  /** 본문에 금액 표기가 있는 템플릿만 채워진다. 통화는 릴레이가 KRW 로 붙인다. */
+  price?: number;
 }
 
 /** 접수 결과 보고 (sendAlimTalk 응답). */
