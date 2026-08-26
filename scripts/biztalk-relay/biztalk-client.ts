@@ -99,6 +99,8 @@ export interface SendAlimTalkInput {
   recipient: string;
   message: string;
   buttons: AlimtalkButton[];
+  /** 본문에 금액 표기가 있는 템플릿만. 통화는 여기서 KRW 로 고정해 붙인다. */
+  price?: number;
 }
 
 export async function sendAlimTalk(input: SendAlimTalkInput): Promise<SendResult> {
@@ -121,6 +123,10 @@ export async function sendAlimTalk(input: SendAlimTalkInput): Promise<SendResult
           message: input.message,
           recipient: input.recipient,
           ...(input.buttons.length ? { attach: { button: input.buttons } } : {}),
+          // 본문에 금액이 있으면 카카오가 정산성 메시지로 식별할 수 있게 함께 보낸다.
+          ...(typeof input.price === "number" && input.price > 0
+            ? { price: input.price, currencyType: "KRW" }
+            : {}),
         }),
       })
     );
