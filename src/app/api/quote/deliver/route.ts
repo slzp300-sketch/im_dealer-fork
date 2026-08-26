@@ -53,7 +53,10 @@ function isAwaitMessageEnabled(): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  const awaitMessage = isAwaitMessageEnabled();
+  // 대기 모드는 견적 페이지가 채널톡 유도 흐름을 탈 때(자동발송 OFF)만 의미가 있다.
+  // 자동발송이 켜진 채로 대기 모드만 켜면 화면은 "전송 완료"인데 아무것도 나가지
+  // 않는다 — 그 조합이 생기지 않도록 자동발송을 우선한다.
+  const awaitMessage = isAwaitMessageEnabled() && !isQuoteAutoSendEnabled();
   if (!awaitMessage && !isQuoteAutoSendEnabled()) {
     return NextResponse.json({ error: "사용할 수 없는 기능입니다." }, { status: 404 });
   }
