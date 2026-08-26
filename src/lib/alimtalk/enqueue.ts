@@ -24,6 +24,8 @@ export interface EnqueueAlimtalkInput {
   phone: string | null | undefined;
   message: string;
   buttons?: AlimtalkButton[];
+  /** 본문에 금액 표기가 있으면 그 금액(원). 카카오가 정산성 메시지를 식별하는 데 쓴다. */
+  price?: number | null;
   userId?: string;
   refType?: string;
   refId?: string;
@@ -57,6 +59,8 @@ export async function enqueueAlimtalk(
       buttons: input.buttons?.length
         ? (input.buttons as unknown as Prisma.InputJsonValue)
         : undefined,
+      // 0 원은 금액 표기로서 의미가 없고 카카오도 양수만 받으므로 보내지 않는다.
+      price: typeof input.price === "number" && input.price > 0 ? Math.round(input.price) : null,
       userId: input.userId ?? null,
       refType: input.refType ?? null,
       refId: input.refId ?? null,

@@ -1166,6 +1166,7 @@ model AlimtalkMessage {
   recipient    String // 암호화 저장 (src/lib/pii.ts encryptString)
   message      String // 변수 치환이 끝난 최종 본문. 템플릿과 글자 단위로 일치해야 한다.
   buttons      Json? // attach.button[] 원형
+  price        Int? // 본문에 금액이 있는 템플릿만. 릴레이가 price/currencyType 으로 실어 보낸다.
 
   userId  String?
   refType String? // "quote" | "consult" | "review"

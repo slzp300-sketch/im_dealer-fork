@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
         recipient: true,
         message: true,
         buttons: true,
+        price: true,
         attempts: true,
       },
     });
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest) {
         recipient,
         message: candidate.message,
         buttons: (candidate.buttons as AlimtalkButton[] | null) ?? [],
+        ...(candidate.price !== null ? { price: candidate.price } : {}),
       });
     }
 
