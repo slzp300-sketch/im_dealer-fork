@@ -4,10 +4,15 @@
 //
 // 등록 원문의 `#{변수}` 자리에 값을 채운 결과가 buildMessage 의 반환값이어야 한다.
 
-import type { AlimtalkChannelAddButton, AlimtalkWebLinkButton } from "./types";
+import type {
+  AlimtalkChannelAddButton,
+  AlimtalkConsultButton,
+  AlimtalkWebLinkButton,
+} from "./types";
 
 export type AlimtalkTemplateKey =
   | "QUOTE_DELIVERED"
+  | "QUOTE_CONSULT"
   | "REVIEW_REQUEST"
   | "SIGNUP_COMPLETED";
 
@@ -72,6 +77,57 @@ export function buildQuoteDeliveredButtons(
     { name: "채널 추가", type: "AC" },
     { name: "견적서 확인하기", type: "WL", url_mobile: linkUrl, url_pc: linkUrl },
   ];
+}
+
+// ── 상담전환톡 ──────────────────────────────────────────────
+// 견적서보다 먼저 나가는 메시지. 고객이 버튼을 눌러 상담이 열린 뒤에야 견적서가
+// 발송된다(채널톡 웹훅 → dispatchQuoteDeliveryByRequestCode). 견적서만 받고 이탈해
+// 상담이 열리지 않는 문제를 막으려는 구조다.
+//
+// 월 납입금은 일부러 넣지 않는다 — 금액까지 보여주면 버튼을 누르지 않아도 알고 싶은
+// 것을 얻어 상담 유도력이 떨어진다. 금액은 견적서 쪽에 남긴다.
+
+/** 비즈톡센터에 등록할 원문. 검수 접수 시 이 문자열을 그대로 붙여넣는다. */
+export const QUOTE_CONSULT_DRAFT = `[아임딜러] 견적서 준비 완료
+
+#{고객명}님, 요청하신 견적서가 준비되었습니다.
+
+■ 차량: #{차량명} #{트림명}
+■ 상품: #{상품유형} · #{계약기간}개월 · 연 #{약정거리}km
+
+아래 버튼을 누르시면 견적서를 보내드리고 상담도 바로 이어집니다.
+
+※ 본 메시지는 견적서 발송을 요청하신 고객님께 발송되는 안내입니다.`;
+
+export interface QuoteConsultVars {
+  readonly 고객명: string;
+  readonly 차량명: string;
+  readonly 트림명: string;
+  readonly 상품유형: string;
+  readonly 계약기간: number;
+  readonly 약정거리: number;
+}
+
+export function buildQuoteConsultMessage(v: QuoteConsultVars): string {
+  const 고객명 = sanitizeTemplateVar(v.고객명, 20) || "고객";
+  return `[아임딜러] 견적서 준비 완료
+
+${고객명}님, 요청하신 견적서가 준비되었습니다.
+
+■ 차량: ${v.차량명} ${v.트림명}
+■ 상품: ${v.상품유형} · ${v.계약기간}개월 · 연 ${won(v.약정거리)}km
+
+아래 버튼을 누르시면 견적서를 보내드리고 상담도 바로 이어집니다.
+
+※ 본 메시지는 견적서 발송을 요청하신 고객님께 발송되는 안내입니다.`;
+}
+
+/**
+ * 버튼명은 비즈톡센터 등록값과 글자 단위로 같아야 한다(불일치 시 3027).
+ * chat_extra 에 요청번호를 실어, 고객이 버튼만 눌러도 어느 견적서인지 알 수 있게 한다.
+ */
+export function buildQuoteConsultButtons(requestCode: string): [AlimtalkConsultButton] {
+  return [{ name: "견적서 받기", type: "BC", chat_extra: requestCode }];
 }
 
 /** 비즈톡센터에 등록할 원문. 검수 접수 시 이 문자열을 그대로 붙여넣는다. */

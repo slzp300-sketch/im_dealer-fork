@@ -191,12 +191,34 @@ describe("POST /api/quote/deliver", () => {
       expect(mocks.upload).toHaveBeenCalled();
     });
 
-    it("알림톡을 적재하지 않고 요청번호를 돌려준다", async () => {
+    // 견적서가 아니라 상담전환톡이 먼저 나간다. 견적서는 고객이 버튼을 눌러
+    // 상담이 열린 뒤 채널톡 웹훅이 보낸다.
+    it("견적서 대신 상담전환톡을 보내고 요청번호를 돌려준다", async () => {
       const res = await POST(request());
       const body = await res.json();
 
-      expect(mocks.enqueueAlimtalk).not.toHaveBeenCalled();
       expect(body.data.requestCode).toMatch(/^[2-9A-HJ-NP-Z]{6}$/);
+      expect(mocks.enqueueAlimtalk).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateKey: "QUOTE_CONSULT",
+          phone: "01012345678",
+          buttons: [
+            { name: "견적서 받기", type: "BC", chat_extra: body.data.requestCode },
+          ],
+        })
+      );
+      // 상담전환톡 본문에는 금액이 없다 — price 를 실으면 등록 내용과 어긋난다.
+      expect(mocks.enqueueAlimtalk.mock.calls[0][0].price).toBeUndefined();
+    });
+
+    // 상담전환톡이 안 나가면 고객은 아무것도 못 받는다. 조용히 성공으로 닫지 않는다.
+    it("상담전환톡 적재가 실패하면 502 로 끊는다", async () => {
+      mocks.enqueueAlimtalk.mockResolvedValue({ ok: false, reason: "no_template_code" });
+
+      const res = await POST(request());
+
+      expect(res.status).toBe(502);
+      expect(mocks.remove).toHaveBeenCalled();
     });
 
     // 이 조합이면 화면은 "전송 완료"인데 아무것도 안 나간다. 자동발송을 우선한다.

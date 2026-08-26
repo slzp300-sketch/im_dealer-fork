@@ -19,6 +19,8 @@ import { generateQuoteRequestCode } from "@/lib/quote-delivery/request-code";
 import { strictRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { enqueueAlimtalk, type EnqueueAlimtalkResult } from "@/lib/alimtalk/enqueue";
 import {
+  buildQuoteConsultButtons,
+  buildQuoteConsultMessage,
   buildQuoteDeliveredButtons,
   buildQuoteDeliveredMessage,
 } from "@/lib/alimtalk/templates";
@@ -155,9 +157,24 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
 
-    // 대기 모드에서는 고객이 카카오 채널로 요청번호를 보내야 발송이 시작된다.
-    // 그 전까지 열람 링크도 열리지 않는다(AWAITING_MESSAGE 는 SENT 가 아니다).
-    if (awaitMessage) {
+    // 대기 모드에서는 견적서 대신 상담전환톡을 보낸다. 고객이 그 버튼을 눌러 상담이
+    // 열리면 채널톡 웹훅이 요청번호로 이 건을 찾아 견적서를 발송한다.
+    // 그 전까지는 열람 링크도 열리지 않는다(AWAITING_MESSAGE 는 SENT 가 아니다).
+    if (awaitMessage && requestCode) {
+      const consultQueued = await enqueueQuoteConsultAlimtalk({
+        user,
+        imageData,
+        requestCode,
+        savedQuoteId: savedQuote.id,
+      });
+      if (!consultQueued.ok) {
+        await markDeliveryFailed(delivery.id, consultQueued.reason);
+        await removeUploadedQuote(path);
+        return NextResponse.json(
+          { error: "카카오톡 전송에 실패했습니다. 다시 시도하거나 상담하기를 이용해 주세요." },
+          { status: 502 }
+        );
+      }
       return NextResponse.json({
         success: true,
         data: { deliveryId: delivery.id, requestCode },
@@ -216,6 +233,60 @@ function getConfiguredAppOrigin(): string | null {
 
 function quoteLinkUrl(appOrigin: string, deliveryId: string): string {
   return `${appOrigin}/quote/delivery/${encodeURIComponent(deliveryId)}`;
+}
+
+/**
+ * 대기 모드의 첫 메시지. 견적서가 아니라 상담전환톡을 보낸다.
+ * 금액은 담지 않으므로 price 도 싣지 않는다(본문에 금액 표기가 없다).
+ */
+async function enqueueQuoteConsultAlimtalk(params: {
+  user: { id: string; name: string; phone: string | null };
+  imageData: PDFQuoteData;
+  requestCode: string;
+  savedQuoteId: string;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const { user, imageData, requestCode, savedQuoteId } = params;
+
+  let result: EnqueueAlimtalkResult;
+  try {
+    result = await enqueueAlimtalk({
+      templateKey: "QUOTE_CONSULT",
+      phone: user.phone,
+      message: buildQuoteConsultMessage({
+        고객명: user.name,
+        차량명: imageData.vehicleName,
+        트림명: imageData.trimName,
+        상품유형: imageData.productType,
+        계약기간: imageData.contractMonths,
+        약정거리: imageData.annualMileage,
+      }),
+      buttons: buildQuoteConsultButtons(requestCode),
+      userId: user.id,
+      refType: "quote",
+      refId: savedQuoteId,
+    });
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    console.error("[quote/deliver] 상담전환톡 적재 실패:", error);
+    await notifyAlimtalkEnqueueFailed({
+      savedQuoteId,
+      vehicleName: imageData.vehicleName,
+      reason: "error",
+    });
+    return { ok: false, reason: "error" };
+  }
+
+  if (!result.ok) {
+    console.warn(`[quote/deliver] 상담전환톡 적재 건너뜀: ${result.reason}`);
+    await notifyAlimtalkEnqueueFailed({
+      savedQuoteId,
+      vehicleName: imageData.vehicleName,
+      reason: result.reason,
+    });
+    return { ok: false, reason: result.reason };
+  }
+
+  return { ok: true };
 }
 
 async function enqueueQuoteAlimtalk(params: {

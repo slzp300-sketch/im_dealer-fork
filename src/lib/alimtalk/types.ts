@@ -1,7 +1,7 @@
 // 앱 ↔ 릴레이(scripts/biztalk-relay) 사이의 계약.
 // 릴레이가 이 파일을 직접 import 하므로 Next.js 전용 코드를 넣지 않는다.
 
-/** 알림톡 버튼. 비즈톡 attach.button[] 스펙 중 우리가 쓰는 웹링크(WL)·채널추가(AC)만. */
+/** 알림톡 버튼. 비즈톡 attach.button[] 스펙 중 우리가 쓰는 웹링크(WL)·채널추가(AC)·상담톡전환(BC)만. */
 export interface AlimtalkWebLinkButton {
   name: string;
   type: "WL";
@@ -15,7 +15,23 @@ export interface AlimtalkChannelAddButton {
   type: "AC";
 }
 
-export type AlimtalkButton = AlimtalkWebLinkButton | AlimtalkChannelAddButton;
+/**
+ * 상담톡 전환 버튼. 누르면 카카오 상담톡으로 넘어가 상담이 열린다.
+ * chat_extra 는 그때 함께 전달되는 메타정보(Text(50))로, 고객이 아무것도 입력하지
+ * 않아도 어느 견적서를 보내야 하는지 잇는 유일한 단서다.
+ *
+ * 상담톡을 이용하는 채널에서만 동작한다.
+ */
+export interface AlimtalkConsultButton {
+  name: string;
+  type: "BC";
+  chat_extra: string;
+}
+
+export type AlimtalkButton =
+  | AlimtalkWebLinkButton
+  | AlimtalkChannelAddButton
+  | AlimtalkConsultButton;
 
 /** 클레임 응답 — 릴레이가 sendAlimTalk 에 그대로 실어 보낼 수 있는 형태. */
 export interface AlimtalkClaimedMessage {

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  QUOTE_CONSULT_DRAFT,
   QUOTE_DELIVERED_DRAFT,
   REVIEW_REQUEST_DRAFT,
+  buildQuoteConsultButtons,
+  buildQuoteConsultMessage,
   buildQuoteDeliveredButtons,
   buildQuoteDeliveredMessage,
   buildReviewRequestButtons,
@@ -23,6 +26,46 @@ const VARS = {
   금융사: "오릭스캐피탈",
   링크: "https://www.imdealer.co.kr/quote/delivery/abc",
 };
+
+describe("buildQuoteConsultMessage", () => {
+  const CONSULT_VARS = {
+    고객명: "홍길동",
+    차량명: "쏘렌토",
+    트림명: "프레스티지",
+    상품유형: "리스",
+    계약기간: 36,
+    약정거리: 20000,
+  };
+
+  it("등록 원문의 변수만 치환한 결과와 일치한다", () => {
+    const expected = QUOTE_CONSULT_DRAFT.replace("#{고객명}", "홍길동")
+      .replace("#{차량명}", "쏘렌토")
+      .replace("#{트림명}", "프레스티지")
+      .replace("#{상품유형}", "리스")
+      .replace("#{계약기간}", "36")
+      .replace("#{약정거리}", "20,000");
+
+    expect(buildQuoteConsultMessage(CONSULT_VARS)).toBe(expected);
+  });
+
+  it("미치환 변수가 남지 않는다", () => {
+    expect(buildQuoteConsultMessage(CONSULT_VARS)).not.toMatch(/#\{/);
+  });
+
+  // 금액을 넣으면 등록 내용과 어긋나고, 버튼을 누를 이유도 약해진다.
+  it("월 납입금을 담지 않는다", () => {
+    expect(buildQuoteConsultMessage(CONSULT_VARS)).not.toMatch(/납입금/);
+  });
+});
+
+describe("buildQuoteConsultButtons", () => {
+  // 버튼명이 센터 등록값과 다르면 3027 로 전량 실패한다.
+  it("상담톡 전환 버튼 하나에 요청번호를 실어 보낸다", () => {
+    expect(buildQuoteConsultButtons("AB23CD")).toEqual([
+      { name: "견적서 받기", type: "BC", chat_extra: "AB23CD" },
+    ]);
+  });
+});
 
 describe("buildQuoteDeliveredMessage", () => {
   // 승인 템플릿과 본문이 글자 단위로 다르면 resultCode 3016 으로 실패하고 재시도해도 소용없다.
