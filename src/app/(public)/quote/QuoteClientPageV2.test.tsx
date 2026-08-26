@@ -496,6 +496,9 @@ describe("QuoteClientPageV2 consultation fallback", () => {
           data: savedQuoteSuccessData({ id: "saved-quote-1", sessionId: "saved-session-1" }),
         });
       }
+      if (url === "/api/quote/deliver") {
+        return Response.json({ success: true, data: { deliveryId: "d1", requestCode: "AB23CD" } });
+      }
       return Response.json({ success: false, error: "unexpected request" }, { status: 500 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -512,10 +515,16 @@ describe("QuoteClientPageV2 consultation fallback", () => {
       );
     });
 
-    // 임시방편: 자동발송(/api/quote/deliver) 대신 안내 모달 → 카카오 채널 대화창으로 유도한다.
-    expect(fetchMock).not.toHaveBeenCalledWith(
-      "/api/quote/deliver",
-      expect.anything()
+    // 발송은 하지 않되 견적서·요청번호는 미리 준비한다 — 고객이 카카오 채널로 요청번호를
+    // 보내면 채널톡 웹훅이 그때 발송을 시작한다.
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/quote/deliver",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("요청번호 AB23CD"))
     );
     // ① 상담사가 볼 견적 컨텍스트를 채널톡 track 으로 기록
     const trackCall = channelCalls.find(

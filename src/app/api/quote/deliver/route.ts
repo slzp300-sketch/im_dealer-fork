@@ -15,6 +15,7 @@ import { requireActiveUser } from "@/lib/require-user";
 import { renderQuoteImageBuffer } from "@/lib/quote-image/render-quote-image";
 import { buildOfficialDeliveryImageData } from "@/lib/quote-delivery/official-image";
 import { deleteQuoteImage, uploadQuoteImage } from "@/lib/quote-delivery/store";
+import { generateQuoteRequestCode } from "@/lib/quote-delivery/request-code";
 import { strictRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { enqueueAlimtalk, type EnqueueAlimtalkResult } from "@/lib/alimtalk/enqueue";
 import {
@@ -42,8 +43,18 @@ function isQuoteAutoSendEnabled(): boolean {
   return process.env.NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND === "true";
 }
 
+/**
+ * 고객이 카카오 채널에 요청 메시지를 보낸 뒤에 발송하는 모드.
+ * 여기서는 PNG·열람 링크·요청번호만 만들어 두고, 실제 적재는 채널톡 웹훅이 한다.
+ * 목적은 견적서가 나가기 전에 상담이 먼저 열리게 하는 것이다.
+ */
+function isAwaitMessageEnabled(): boolean {
+  return process.env.QUOTE_DELIVERY_AWAIT_MESSAGE === "true";
+}
+
 export async function POST(req: NextRequest) {
-  if (!isQuoteAutoSendEnabled()) {
+  const awaitMessage = isAwaitMessageEnabled();
+  if (!awaitMessage && !isQuoteAutoSendEnabled()) {
     return NextResponse.json({ error: "사용할 수 없는 기능입니다." }, { status: 404 });
   }
 
@@ -126,6 +137,8 @@ export async function POST(req: NextRequest) {
     const { path } = await uploadQuoteImage({ png });
     uploadedPath = path;
 
+    const requestCode = awaitMessage ? await createUniqueRequestCode() : null;
+
     delivery = await prisma.quoteDelivery.create({
       data: {
         userId: user.id,
@@ -133,10 +146,20 @@ export async function POST(req: NextRequest) {
         vehicleName: imageData.vehicleName,
         imagePath: path,
         channel: "alimtalk",
-        status: "PENDING",
+        status: awaitMessage ? "AWAITING_MESSAGE" : "PENDING",
+        requestCode,
       },
       select: { id: true },
     });
+
+    // 대기 모드에서는 고객이 카카오 채널로 요청번호를 보내야 발송이 시작된다.
+    // 그 전까지 열람 링크도 열리지 않는다(AWAITING_MESSAGE 는 SENT 가 아니다).
+    if (awaitMessage) {
+      return NextResponse.json({
+        success: true,
+        data: { deliveryId: delivery.id, requestCode },
+      });
+    }
 
     const queued = await enqueueQuoteAlimtalk({
       user,
@@ -247,6 +270,22 @@ async function enqueueQuoteAlimtalk(params: {
   }
 
   return { ok: true };
+}
+
+/**
+ * 요청번호는 6자라 드물게 충돌한다. 고객이 이미 안내받은 번호를 나중에 바꿀 수는
+ * 없으므로, 발급 시점에 비어 있는 번호를 확보한다.
+ */
+async function createUniqueRequestCode(attempts = 5): Promise<string> {
+  for (let i = 0; i < attempts; i += 1) {
+    const code = generateQuoteRequestCode();
+    const taken = await prisma.quoteDelivery.findUnique({
+      where: { requestCode: code },
+      select: { id: true },
+    });
+    if (!taken) return code;
+  }
+  throw new Error("요청번호를 발급하지 못했습니다.");
 }
 
 async function markDeliverySent(deliveryId: string): Promise<void> {
