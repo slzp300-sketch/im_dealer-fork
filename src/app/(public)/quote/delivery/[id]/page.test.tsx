@@ -83,6 +83,31 @@ describe("QuoteDeliveryPage", () => {
     );
   });
 
+  it("원본 이미지를 새 탭으로 열 수 있게 하고 저장 링크를 함께 제공한다", async () => {
+    const page = await QuoteDeliveryPage({
+      params: Promise.resolve({ id: "delivery-1" }),
+    });
+
+    render(page);
+
+    const imageUrl =
+      "https://storage.example/storage/v1/object/public/quotes/deliveries/quote.png";
+
+    // 이미지 자체를 눌러도, 아래 버튼을 눌러도 원본이 새 탭에서 열려야 한다.
+    for (const name of ["쏘렌토 견적서 원본 크게 보기", "크게 보기"]) {
+      const link = screen.getByRole("link", { name });
+      expect(link).toHaveAttribute("href", imageUrl);
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    }
+
+    // 스토리지가 다른 오리진이라 download 속성 대신 ?download= 로 받아야 저장된다.
+    expect(screen.getByRole("link", { name: "이미지 저장" })).toHaveAttribute(
+      "href",
+      `${imageUrl}?download=imdealer-quote.png`
+    );
+  });
+
   it("exposes the exact quote image as Open Graph metadata for Kakao scraping", async () => {
     const metadata = await generateMetadata({
       params: Promise.resolve({ id: "delivery-1" }),
@@ -125,6 +150,7 @@ describe("QuoteDeliveryPage", () => {
 
     expect(screen.getByText(/준비 중/)).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "쏘렌토 견적서" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "이미지 저장" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "쏘렌토 견적서" })).not.toBeInTheDocument();
 
     await expect(

@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowRight, Clock, FileImage } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, Download, FileImage, ZoomIn } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { quoteImagePublicUrl } from "@/lib/quote-delivery/public-url";
+import {
+  quoteImageDownloadUrl,
+  quoteImagePublicUrl,
+} from "@/lib/quote-delivery/public-url";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +132,7 @@ export default async function QuoteDeliveryPage({ params }: QuoteDeliveryPagePro
   }
 
   const imageUrl = quoteImagePublicUrl(view.delivery.imagePath);
+  const downloadUrl = quoteImageDownloadUrl(view.delivery.imagePath);
 
   return (
     <main className="min-h-screen bg-app-bg px-4 py-8 md:py-14">
@@ -138,7 +142,15 @@ export default async function QuoteDeliveryPage({ params }: QuoteDeliveryPagePro
           title={`${view.delivery.vehicleName} 견적서`}
         />
 
-        <div className="overflow-hidden rounded-[20px] border border-border-subtle bg-surface shadow-card">
+        {/* 견적서는 세로로 긴 PNG 라 페이지 안에서는 글씨가 작다.
+            원본을 새 탭으로 열면 브라우저 기본 뷰어라 확대·축소가 그대로 된다. */}
+        <a
+          href={imageUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${view.delivery.vehicleName} 견적서 원본 크게 보기`}
+          className="block overflow-hidden rounded-[20px] border border-border-subtle bg-surface shadow-card"
+        >
           <Image
             src={imageUrl}
             alt={`${view.delivery.vehicleName} 견적서`}
@@ -147,6 +159,22 @@ export default async function QuoteDeliveryPage({ params }: QuoteDeliveryPagePro
             unoptimized
             className="block h-auto w-full"
           />
+        </a>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <a
+            href={imageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={secondaryActionClass}
+          >
+            <ZoomIn size={17} />
+            크게 보기
+          </a>
+          <a href={downloadUrl} className={secondaryActionClass}>
+            <Download size={17} />
+            이미지 저장
+          </a>
         </div>
 
         <p className="mt-4 break-keep text-center text-[13px] leading-relaxed text-text-muted">
@@ -158,6 +186,9 @@ export default async function QuoteDeliveryPage({ params }: QuoteDeliveryPagePro
     </main>
   );
 }
+
+const secondaryActionClass =
+  "flex min-h-[48px] items-center justify-center gap-2 rounded-[14px] border border-border-subtle bg-surface px-4 text-[14px] font-bold text-text-strong shadow-card transition-colors hover:bg-app-bg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/30";
 
 function DeliveryGateNotice({
   icon,
