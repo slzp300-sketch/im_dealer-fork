@@ -5,6 +5,7 @@ import type {
   AlimtalkAcceptReport,
   AlimtalkResultReport,
 } from "../../src/lib/alimtalk/types";
+import { describeCode } from "../../src/lib/alimtalk/result-codes";
 import { claimMessages, reportAccepted, reportResults } from "./app-client";
 import { ackResultPoll, getResultPoll, getToken, sendAlimTalk } from "./biztalk-client";
 
@@ -122,13 +123,27 @@ async function resultLoop(): Promise<void> {
         // 같은 결과가 다시 내려온다 — 결과 24시간 보관 제한 안에서 유실되지 않는다.
         await reportResults(results);
         if (poll.pk) await ackResultPoll(poll.pk);
-        console.log(`[relay] 전송 결과 ${results.length}건 반영`);
+        console.log(
+          `[relay] 전송 결과 ${results.length}건 반영 — ${summarizeResultCodes(results)}`
+        );
       }
     } catch (e) {
       console.error("[relay] 결과 루프 오류:", e instanceof Error ? e.message : e);
     }
     await sleep(interval);
   }
+}
+
+// 접수(responseCode 1000)와 도달은 다르다. 실패 원인은 resultCode 로만 드러나는데
+// 이전에는 건수만 남겨서 pm2 logs 만으로는 왜 안 갔는지 알 수 없었다.
+function summarizeResultCodes(results: AlimtalkResultReport[]): string {
+  const counts = new Map<string, number>();
+  for (const r of results) {
+    counts.set(r.resultCode, (counts.get(r.resultCode) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([code, n]) => `${describeCode(code)} ${n}건`)
+    .join(", ");
 }
 
 async function main(): Promise<void> {
