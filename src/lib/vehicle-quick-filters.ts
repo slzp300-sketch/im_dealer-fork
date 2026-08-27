@@ -7,10 +7,10 @@ export const VEHICLE_CATEGORIES = [
   "전체",
   "승용",
   "RV",
-  "승합",
-  "화물",
   "EV",
   "HEV",
+  "승합",
+  "화물",
 ] as const;
 
 export type CategoryFilter = (typeof VEHICLE_CATEGORIES)[number];

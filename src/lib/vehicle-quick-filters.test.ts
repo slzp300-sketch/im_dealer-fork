@@ -13,10 +13,10 @@ describe("vehicle-quick-filters", () => {
       "전체",
       "승용",
       "RV",
-      "승합",
-      "화물",
       "EV",
       "HEV",
+      "승합",
+      "화물",
     ]);
     expect(BODY_CATEGORY_MAP.승용).toBe("세단");
     expect(BODY_CATEGORY_MAP.RV).toBe("SUV");
