@@ -3,11 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
+  dispatchByPhone: vi.fn(),
+  fetchPhone: vi.fn(),
   checkRateLimit: vi.fn(async (): Promise<NextResponse | null> => null),
 }));
 
 vi.mock("@/lib/quote-delivery/dispatch", () => ({
   dispatchQuoteDeliveryByRequestCode: mocks.dispatch,
+  dispatchQuoteDeliveryByPhone: mocks.dispatchByPhone,
+}));
+
+vi.mock("@/lib/channel-talk-open-api", () => ({
+  fetchChannelTalkUserPhone: mocks.fetchPhone,
 }));
 
 // 로컬·CI 에는 Upstash 가 없어 실제 limiter 는 전부 null 이다. 호출 여부와
@@ -42,6 +49,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("CHANNEL_TALK_WEBHOOK_TOKEN", TOKEN);
   mocks.dispatch.mockResolvedValue({ ok: true, deliveryId: "delivery-1" });
+  mocks.dispatchByPhone.mockResolvedValue({ ok: true, deliveryId: "delivery-1" });
+  mocks.fetchPhone.mockResolvedValue({ ok: true, phone: "+821012345678", profileKeys: [] });
 });
 
 afterEach(() => {
@@ -149,13 +158,85 @@ describe("POST /api/channel-talk/webhook", () => {
     expect(mocks.dispatch).toHaveBeenCalledWith("AB23CD");
   });
 
-  // 요청번호 없는 일반 문의가 대부분이다 — 상담만 열리고 끝나야 한다.
-  it("요청번호가 없으면 아무것도 보내지 않는다", async () => {
+  // 요청번호도 personId 도 없는 이벤트 — 아무것도 하지 않는다.
+  it("요청번호도 고객 식별자도 없으면 아무것도 보내지 않는다", async () => {
     const res = await POST(webhookRequest(messageBody("안녕하세요 상담 가능한가요")));
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ skipped: "no_request_code" });
     expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(mocks.dispatchByPhone).not.toHaveBeenCalled();
+  });
+
+  // 카카오 상담톡은 chat_extra 를 채널톡에 넘기지 않는다(공식 확인). 그래서
+  // 요청번호가 없으면 상담을 연 고객의 전화번호로 대기 건을 찾는 것이 기본 경로다.
+  it("요청번호가 없으면 personId 로 전화번호를 조회해 매칭 발송한다", async () => {
+    const body = {
+      type: "message",
+      entity: { plainText: "안녕하세요", personType: "user", personId: "person-1" },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(res.status).toBe(200);
+    expect(mocks.fetchPhone).toHaveBeenCalledWith("person-1");
+    expect(mocks.dispatchByPhone).toHaveBeenCalledWith("+821012345678");
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
+  // 상담사·봇이 보낸 메시지에도 웹훅이 온다. 그 personId 로 조회하면 안 된다.
+  it("고객이 아닌 발신(personType!=user)은 전화번호 매칭을 하지 않는다", async () => {
+    const body = {
+      type: "message",
+      entity: { plainText: "무엇을 도와드릴까요", personType: "manager", personId: "mgr-1" },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(res.status).toBe(200);
+    expect(mocks.fetchPhone).not.toHaveBeenCalled();
+    expect(mocks.dispatchByPhone).not.toHaveBeenCalled();
+  });
+
+  // 카카오 경유 고객은 프로필에 번호가 없을 수 있다 — 이 설계의 판정 지점이라
+  // skipped 사유를 구분해 남긴다.
+  it("프로필에 전화번호가 없으면 no_phone 으로 지나간다", async () => {
+    mocks.fetchPhone.mockResolvedValue({ ok: true, phone: null, profileKeys: ["name"] });
+    const body = {
+      type: "message",
+      entity: { plainText: "안녕하세요", personType: "user", personId: "person-1" },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(await res.json()).toMatchObject({ skipped: "no_phone" });
+    expect(mocks.dispatchByPhone).not.toHaveBeenCalled();
+  });
+
+  // 대기 중인 견적서가 없는 일반 상담 — 정상 경로라 경고 없이 지나간다.
+  it("매칭되는 대기 건이 없으면 not_found 로 지나간다", async () => {
+    mocks.dispatchByPhone.mockResolvedValue({ ok: false, reason: "not_found" });
+    const body = {
+      type: "message",
+      entity: { plainText: "안녕하세요", personType: "user", personId: "person-1" },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(await res.json()).toMatchObject({ skipped: "not_found" });
+  });
+
+  // 요청번호가 있으면 전화번호 조회 없이 그것으로 발송한다 — API 호출을 아낀다.
+  it("요청번호가 있으면 전화번호 조회를 하지 않는다", async () => {
+    const body = {
+      type: "message",
+      entity: { plainText: "요청번호 AB23CD", personType: "user", personId: "person-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.dispatch).toHaveBeenCalledWith("AB23CD");
+    expect(mocks.fetchPhone).not.toHaveBeenCalled();
   });
 
   it("이미 보낸 건은 다시 보내지 않는다", async () => {

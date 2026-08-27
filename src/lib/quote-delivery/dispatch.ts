@@ -5,6 +5,7 @@
 // 어드민의 수동 발송도 같은 경로를 쓴다 — 발송 조건을 한 곳에만 둔다.
 
 import { prisma } from "@/lib/prisma";
+import { toE164KR } from "@/lib/phone";
 import { enqueueAlimtalk } from "@/lib/alimtalk/enqueue";
 import {
   buildQuoteDeliveredButtons,
@@ -57,6 +58,41 @@ export function dispatchQuoteDeliveryByRequestCode(
 /** 어드민 수동 발송 — 고객이 요청번호를 빼고 보낸 건을 상담사가 직접 내보낸다. */
 export function dispatchQuoteDeliveryById(deliveryId: string): Promise<DispatchResult> {
   return dispatchQuoteDelivery({ id: deliveryId });
+}
+
+// 열람 링크 TTL 과 같은 30일. 그보다 오래된 대기 건은 링크가 만료돼 보내도 죽은
+// 링크라, 전화번호 매칭 대상에서 제외하고 어드민 화면에만 남긴다.
+const PHONE_MATCH_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * 전화번호 매칭 — 카카오 상담톡은 chat_extra 등 상담 정보를 채널톡에 넘기지 않아
+ * (채널톡 공식 확인), 상담을 연 고객이 "누구인지"로 대기 건을 찾는 수밖에 없다.
+ * 같은 고객의 대기 건이 여럿이면 가장 최근 것 하나만 보낸다 — 방금 요청한 건이
+ * 고객이 기다리는 그것이고, 이전 건들은 어드민 대기 목록에 그대로 남는다.
+ */
+export async function dispatchQuoteDeliveryByPhone(
+  phone: string
+): Promise<DispatchResult> {
+  const target = toE164KR(phone);
+  if (!target) return { ok: false, reason: "not_found" };
+
+  // User.phone 은 저장 형식이 혼재한다(가입 경로에 따라 "010-…" 또는 "+82 10-…").
+  // DB 동등 비교로는 놓치므로 후보를 가져와 정규화해 비교한다 — 대기 건은 소량이다.
+  const candidates = await prisma.quoteDelivery.findMany({
+    where: {
+      status: "AWAITING_MESSAGE",
+      createdAt: { gte: new Date(Date.now() - PHONE_MATCH_WINDOW_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    select: { id: true, user: { select: { phone: true } } },
+  });
+
+  const matched = candidates.find(
+    (candidate) => toE164KR(candidate.user.phone) === target
+  );
+  if (!matched) return { ok: false, reason: "not_found" };
+  return dispatchQuoteDelivery({ id: matched.id });
 }
 
 async function dispatchQuoteDelivery(
