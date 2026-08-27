@@ -301,6 +301,11 @@ export function createFetchMock(saveStatus = 200) {
         { status: saveStatus }
       );
     }
+    // 기본값은 대기 모드가 꺼진 세계. 404 는 "이 기능을 쓰지 않는다"는 뜻이라
+    // 견적 페이지가 기존 붙여넣기 흐름으로 이어간다.
+    if (url === "/api/quote/deliver") {
+      return Response.json({ error: "사용할 수 없는 기능입니다." }, { status: 404 });
+    }
     return Response.json({ success: false, error: "unexpected request" }, { status: 500 });
   });
 }

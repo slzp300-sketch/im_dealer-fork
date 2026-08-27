@@ -496,8 +496,9 @@ describe("QuoteClientPageV2 consultation fallback", () => {
           data: savedQuoteSuccessData({ id: "saved-quote-1", sessionId: "saved-session-1" }),
         });
       }
+      // 대기 모드가 꺼진 세계 — 준비 API 는 404 라 붙여넣기 흐름으로 이어진다.
       if (url === "/api/quote/deliver") {
-        return Response.json({ success: true, data: { deliveryId: "d1", requestCode: "AB23CD" } });
+        return Response.json({ error: "사용할 수 없는 기능입니다." }, { status: 404 });
       }
       return Response.json({ success: false, error: "unexpected request" }, { status: 500 });
     });
@@ -515,17 +516,6 @@ describe("QuoteClientPageV2 consultation fallback", () => {
       );
     });
 
-    // 발송은 하지 않되 견적서·요청번호는 미리 준비한다 — 고객이 카카오 채널로 요청번호를
-    // 보내면 채널톡 웹훅이 그때 발송을 시작한다.
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/quote/deliver",
-        expect.objectContaining({ method: "POST" })
-      );
-    });
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("요청번호 AB23CD"))
-    );
     // ① 상담사가 볼 견적 컨텍스트를 채널톡 track 으로 기록
     const trackCall = channelCalls.find(
       (args) => args[0] === "track" && args[1] === "quote_delivery_requested"
@@ -706,6 +696,10 @@ describe("QuoteClientPageV2 consultation fallback", () => {
           data: savedQuoteSuccessData({ id: "saved-quote-1", sessionId: "saved-session-1" }),
         });
       }
+      // 대기 모드가 꺼진 세계 — 준비 API 는 404 라 붙여넣기 흐름으로 이어진다.
+      if (url === "/api/quote/deliver") {
+        return Response.json({ error: "사용할 수 없는 기능입니다." }, { status: 404 });
+      }
       return Response.json({ success: false, error: "unexpected request" }, { status: 500 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -754,6 +748,10 @@ describe("QuoteClientPageV2 consultation fallback", () => {
           data: savedQuoteSuccessData({ id: "saved-quote-1", sessionId: "saved-session-1" }),
         });
       }
+      // 대기 모드가 꺼진 세계 — 준비 API 는 404 라 붙여넣기 흐름으로 이어진다.
+      if (url === "/api/quote/deliver") {
+        return Response.json({ error: "사용할 수 없는 기능입니다." }, { status: 404 });
+      }
       return Response.json({ success: false, error: "unexpected request" }, { status: 500 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -798,6 +796,94 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     expect(JSON.parse(String(saveCall?.[1]?.body)).sessionId).toBe(gateSessionId);
     // 세션 키는 소비되어 남아 있지 않는다.
     expect(window.localStorage.getItem("imd_delivery_gate_session")).toBeNull();
+  });
+
+  // 대기 모드에서는 상담전환톡이 이미 카카오톡으로 나갔다. 이때 복사·대화창 열기를
+  // 그대로 하면 고객은 "붙여넣어 보내라"와 "받은 메시지의 버튼을 눌러라"를 동시에
+  // 듣게 되어 무엇을 해야 하는지 알 수 없다.
+  it("대기 모드에서는 붙여넣기 대신 카카오톡 확인을 안내한다", async () => {
+    vi.stubEnv("NEXT_PUBLIC_KAKAO_SYNC", "false");
+    vi.stubEnv("NEXT_PUBLIC_KAKAO_CHANNEL_PUBLIC_ID", "_TestCh");
+    supabaseMock.getUser.mockResolvedValue({
+      data: { user: { id: "supabase-user-1" } },
+    });
+    const openSpy = vi.fn();
+    vi.stubGlobal("open", openSpy);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    writeCalculatedRestore();
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(async (input) => {
+      const url = input.toString();
+      if (url.endsWith("/colors") || url.endsWith("/trims")) {
+        return Response.json({ success: true, data: [] });
+      }
+      if (url === "/api/quote/save") {
+        return Response.json({
+          success: true,
+          data: savedQuoteSuccessData({ id: "saved-quote-1", sessionId: "saved-session-1" }),
+        });
+      }
+      if (url === "/api/quote/deliver") {
+        return Response.json({ success: true, data: { deliveryId: "d1", requestCode: "AB23CD" } });
+      }
+      return Response.json({ success: false, error: "unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<QuoteClientPageV2 vehicles={vehicles} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "카카오톡으로 견적서 받기" })
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "카카오톡을 확인해 주세요" });
+    expect(dialog).toHaveTextContent("「견적서 받기」");
+    // 붙여넣을 것이 없으므로 복사하지 않고, 대화창도 열지 않는다.
+    expect(writeText).not.toHaveBeenCalled();
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  // 상담전환톡이 나가지 못하면 고객은 카카오톡을 열어봐도 아무것도 받지 못한다.
+  // 조용히 붙여넣기 안내로 흘려보내면 무엇이 잘못됐는지 아무도 모른다.
+  it("대기 모드에서 상담전환톡 발송이 실패하면 오류를 알린다", async () => {
+    vi.stubEnv("NEXT_PUBLIC_KAKAO_SYNC", "false");
+    vi.stubEnv("NEXT_PUBLIC_KAKAO_CHANNEL_PUBLIC_ID", "_TestCh");
+    supabaseMock.getUser.mockResolvedValue({
+      data: { user: { id: "supabase-user-1" } },
+    });
+    writeCalculatedRestore();
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(async (input) => {
+      const url = input.toString();
+      if (url.endsWith("/colors") || url.endsWith("/trims")) {
+        return Response.json({ success: true, data: [] });
+      }
+      if (url === "/api/quote/save") {
+        return Response.json({
+          success: true,
+          data: savedQuoteSuccessData({ id: "saved-quote-1", sessionId: "saved-session-1" }),
+        });
+      }
+      if (url === "/api/quote/deliver") {
+        return Response.json({ error: "카카오톡 전송에 실패했습니다." }, { status: 502 });
+      }
+      return Response.json({ success: false, error: "unexpected request" }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<QuoteClientPageV2 vehicles={vehicles} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "카카오톡으로 견적서 받기" })
+    );
+
+    expect(
+      await screen.findByText(/카카오톡 전송에 실패했습니다/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "견적 요청 메시지를 복사했어요" })
+    ).not.toBeInTheDocument();
   });
 
   it("does not route to verification when the review-request coming-soon modal is opened", async () => {

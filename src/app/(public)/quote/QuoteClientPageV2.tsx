@@ -408,6 +408,10 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
   // 모달 열림 상태(deliveryGuideOpen)와 분리해 보관한다.
   const [deliveryRequestMessage, setDeliveryRequestMessage] = useState<string | null>(null);
   const [deliveryGuideOpen, setDeliveryGuideOpen] = useState(false);
+  // 대기 모드면 상담전환톡이 이미 나갔으므로 안내 문구가 달라진다.
+  const [deliveryGuideVariant, setDeliveryGuideVariant] = useState<"paste" | "alimtalk">(
+    "paste"
+  );
   // 웹은 고객이 실제로 대화창에서 전송했는지 알 수 없다 — '보냈어요' 자가 확인으로 받는다.
   const [deliveryConfirmedBySender, setDeliveryConfirmedBySender] = useState(false);
   const [deliveryTrackContext, setDeliveryTrackContext] =
@@ -1227,6 +1231,18 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
       // 카카오 채널로 보낸 뒤 채널톡 웹훅이 시작한다 — 상담이 먼저 열리게 하려는 것이다.
       const requestCode = await prepareQuoteDelivery(savedQuote);
 
+      // 요청번호를 받았다면 상담전환톡이 이미 카카오톡으로 나갔다. 고객은 그 메시지의
+      // 버튼만 누르면 되므로 붙여넣을 것이 없다 — 복사·대화창 열기를 하면 지시가 두
+      // 개가 되어 무엇을 해야 하는지 알 수 없게 된다.
+      if (requestCode) {
+        setDeliveryGuideVariant("alimtalk");
+        setDeliveryRequestMessage("");
+        setDeliveryGuideOpen(true);
+        setDeliverSuccess(true);
+        return;
+      }
+      setDeliveryGuideVariant("paste");
+
       // 채널 대화창은 메시지 프리필이 불가하므로, 견적 정보가 담긴 요청 메시지를
       // 클립보드에 복사해 고객이 대화창에 붙여넣고 보내도록 유도한다(상담사가 견적 파악).
       const requestSubject = [vehicleName, quoteResult.trimName].filter(Boolean).join(" ");
@@ -1272,15 +1288,20 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
           sessionId: savedQuote.sessionId,
         }),
       });
-      if (!response.ok) return null;
+      // 404 는 대기 모드가 꺼져 있다는 뜻이라 기존 붙여넣기 흐름으로 이어간다.
+      // 그 밖의 실패는 상담전환톡이 나가지 못한 것이므로 조용히 넘기면 안 된다 —
+      // 고객은 카카오톡을 열어봐도 아무것도 받지 못한 채 기다리게 된다.
+      if (response.status === 404) return null;
+      if (!response.ok) {
+        throw new Error("카카오톡 전송에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      }
       const payload: unknown = await response.json().catch(() => null);
       const parsed = quotePreparedSchema.safeParse(payload);
       return parsed.success ? (parsed.data.data.requestCode ?? null) : null;
     } catch (prepareError) {
       if (!(prepareError instanceof Error)) throw prepareError;
-      // 준비에 실패해도 상담 자체는 열려야 한다 — 상담사가 수동으로 보낼 수 있다.
       console.error("[quote] 견적서 준비 실패:", prepareError);
-      return null;
+      throw prepareError;
     }
   }
 
@@ -1839,6 +1860,7 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
       <QuoteDeliveryGuideModal
         open={deliveryGuideOpen}
         message={deliveryRequestMessage ?? ""}
+        variant={deliveryGuideVariant}
         onClose={() => setDeliveryGuideOpen(false)}
         onConfirm={handleDeliveryGuideConfirm}
       />
