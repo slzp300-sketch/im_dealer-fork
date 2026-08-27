@@ -329,6 +329,10 @@ describe("IssuedCoupon 복합 유니크 정합 (T19)", () => {
   // vitest 루트(레포 최상위) 기준 경로.
   const repoRoot = process.cwd();
   const migrationsDir = join(repoRoot, "prisma", "migrations");
+  // 부분 유니크는 08-11 추천 시스템 마이그레이션이 처음 만들고, 08-19 정합
+  // 마이그레이션이 프로덕션 실측 모양으로 재선언한다. 정합 쪽이 단일 진실 공급원.
+  const REFERRAL_MIGRATION = "20260811000000_referral_system";
+  const PARTIAL_UNIQUES_MIGRATION = "20260819000000_issued_coupon_partial_uniques";
 
   function readAllMigrations(): { dir: string; sql: string }[] {
     return readdirSync(migrationsDir, { withFileTypes: true })
@@ -340,20 +344,20 @@ describe("IssuedCoupon 복합 유니크 정합 (T19)", () => {
       .sort((a, b) => a.dir.localeCompare(b.dir));
   }
 
-  it("부분 유니크 마이그레이션이 존재한다", () => {
-    const migrations = readAllMigrations();
-    const owners = migrations.filter((m) =>
-      m.sql.includes("IssuedCoupon_nonreferral_unique")
-    );
-    expect(owners.length).toBe(1);
+  function readMigration(dir: string): string {
+    return readFileSync(join(migrationsDir, dir, "migration.sql"), "utf8");
+  }
+
+  it("부분 유니크는 추천 시스템·정합 두 마이그레이션에 걸쳐 존재한다", () => {
+    const owners = readAllMigrations()
+      .filter((m) => m.sql.includes("IssuedCoupon_nonreferral_unique"))
+      .map((m) => m.dir);
+
+    expect(owners).toEqual([REFERRAL_MIGRATION, PARTIAL_UNIQUES_MIGRATION]);
   });
 
-  it("마이그레이션은 두 부분 유니크를 만들고 레거시 풀 유니크를 제거한다", () => {
-    const migration = readAllMigrations().find((m) =>
-      m.sql.includes("IssuedCoupon_nonreferral_unique")
-    );
-    expect(migration).toBeDefined();
-    const sql = migration!.sql;
+  it("정합 마이그레이션(08-19)은 두 부분 유니크를 만들고 레거시 풀 유니크를 제거한다", () => {
+    const sql = readMigration(PARTIAL_UNIQUES_MIGRATION);
 
     // 비추천 쿠폰: 회원×정책 1장 (reconcile 경로 전부)
     expect(sql).toMatch(
@@ -367,11 +371,10 @@ describe("IssuedCoupon 복합 유니크 정합 (T19)", () => {
     expect(sql).toContain('DROP INDEX IF EXISTS "IssuedCoupon_userId_policyId_key"');
   });
 
-  it("유니크 생성 전에 중복 낙오 행을 삭제 정리한다", () => {
-    const migration = readAllMigrations().find((m) =>
-      m.sql.includes("IssuedCoupon_nonreferral_unique")
-    );
-    const sql = migration!.sql;
+  it("정합 마이그레이션(08-19)은 유니크 생성 전에 중복 낙오 행을 삭제 정리한다", () => {
+    // 08-11 추천 시스템 마이그레이션엔 낙오 정리 단계가 없으므로, 이 검증은 반드시
+    // 정합 마이그레이션 파일을 직접 읽어야 한다.
+    const sql = readMigration(PARTIAL_UNIQUES_MIGRATION);
 
     // 중복 제거가 먼저 오고 유니크 생성이 나중에 와야 색인 생성이 실패하지 않는다.
     // 부분 유니크는 상태와 무관하게 키를 점유하므로, 폐기(REVOKED)가 아니라

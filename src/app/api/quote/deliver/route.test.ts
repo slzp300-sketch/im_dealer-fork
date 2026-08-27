@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   buildOfficialImageData: vi.fn(),
   createDelivery: vi.fn(),
   updateDelivery: vi.fn(),
+  findDelivery: vi.fn(),
   render: vi.fn(),
   upload: vi.fn(),
   remove: vi.fn(),
@@ -19,7 +20,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     savedQuote: { findFirst: mocks.findSavedQuote },
-    quoteDelivery: { create: mocks.createDelivery, update: mocks.updateDelivery },
+    quoteDelivery: {
+      create: mocks.createDelivery,
+      update: mocks.updateDelivery,
+      findUnique: mocks.findDelivery,
+    },
     adminNotification: {
       findFirst: mocks.findNotification,
       create: mocks.createNotification,
@@ -149,6 +154,7 @@ describe("POST /api/quote/deliver", () => {
     mocks.upload.mockResolvedValue({ path: "deliveries/img.png" });
     mocks.remove.mockResolvedValue(undefined);
     mocks.createDelivery.mockResolvedValue({ id: "delivery-1" });
+    mocks.findDelivery.mockResolvedValue(null);
     mocks.updateDelivery.mockResolvedValue({});
     mocks.enqueueAlimtalk.mockResolvedValue({ ok: true, id: "alim-1" });
     mocks.findNotification.mockResolvedValue(null);
@@ -167,6 +173,76 @@ describe("POST /api/quote/deliver", () => {
     expect(res.status).toBe(404);
     expect(mocks.requireActiveUser).not.toHaveBeenCalled();
     expect(mocks.render).not.toHaveBeenCalled();
+  });
+
+  // 대기 모드: 상담이 먼저 열리게 하려고, 발송은 고객이 카카오 채널로 요청번호를
+  // 보낸 뒤 채널톡 웹훅이 시작한다. 여기서는 견적서와 번호만 만들어 둔다.
+  describe("고객 메시지 대기 모드", () => {
+    beforeEach(() => {
+      vi.stubEnv("NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND", "false");
+      vi.stubEnv("QUOTE_DELIVERY_AWAIT_MESSAGE", "true");
+    });
+
+    it("자동발송이 꺼져 있어도 동작한다", async () => {
+      const res = await POST(request());
+
+      expect(res.status).toBe(200);
+      expect(mocks.render).toHaveBeenCalled();
+      expect(mocks.upload).toHaveBeenCalled();
+    });
+
+    // 견적서가 아니라 상담전환톡이 먼저 나간다. 견적서는 고객이 버튼을 눌러
+    // 상담이 열린 뒤 채널톡 웹훅이 보낸다.
+    it("견적서 대신 상담전환톡을 보내고 요청번호를 돌려준다", async () => {
+      const res = await POST(request());
+      const body = await res.json();
+
+      expect(body.data.requestCode).toMatch(/^[2-9A-HJ-NP-Z]{6}$/);
+      expect(mocks.enqueueAlimtalk).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateKey: "QUOTE_CONSULT",
+          phone: "01012345678",
+          buttons: [
+            { name: "견적서 받기", type: "BC", chat_extra: body.data.requestCode },
+          ],
+        })
+      );
+      // 상담전환톡 본문에는 금액이 없다 — price 를 실으면 등록 내용과 어긋난다.
+      expect(mocks.enqueueAlimtalk.mock.calls[0][0].price).toBeUndefined();
+    });
+
+    // 상담전환톡이 안 나가면 고객은 아무것도 못 받는다. 조용히 성공으로 닫지 않는다.
+    it("상담전환톡 적재가 실패하면 502 로 끊는다", async () => {
+      mocks.enqueueAlimtalk.mockResolvedValue({ ok: false, reason: "no_template_code" });
+
+      const res = await POST(request());
+
+      expect(res.status).toBe(502);
+      expect(mocks.remove).toHaveBeenCalled();
+    });
+
+    // 이 조합이면 화면은 "전송 완료"인데 아무것도 안 나간다. 자동발송을 우선한다.
+    it("자동발송이 켜져 있으면 대기 모드를 무시하고 그대로 보낸다", async () => {
+      vi.stubEnv("NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND", "true");
+
+      const res = await POST(request());
+      const body = await res.json();
+
+      expect(mocks.enqueueAlimtalk).toHaveBeenCalled();
+      expect(body.data.requestCode).toBeUndefined();
+    });
+
+    it("발송 전이므로 AWAITING_MESSAGE 로 남긴다", async () => {
+      await POST(request());
+
+      expect(mocks.createDelivery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "AWAITING_MESSAGE" }),
+        })
+      );
+      // 아직 보내지 않았으므로 SENT 로 올리지 않는다.
+      expect(mocks.updateDelivery).not.toHaveBeenCalled();
+    });
   });
 
   it("비로그인은 401", async () => {

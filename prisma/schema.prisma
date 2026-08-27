@@ -721,7 +721,9 @@ model QuoteDelivery {
   vehicleName   String
   imagePath     String // Storage 경로 (PNG)
   channel       String    @default("memo") // "alimtalk"(채널 알림톡) | "memo"(구 나에게 보내기)
-  status        String    @default("PENDING") // PENDING | SENT | FAILED
+  status        String    @default("PENDING") // PENDING | AWAITING_MESSAGE | SENT | FAILED
+  // 고객이 카카오 채널에 보낸 메시지와 이 견적서를 잇는 코드. 채널톡 웹훅이 이 값으로 찾는다.
+  requestCode   String?   @unique
   failReason    String?
   sentAt        DateTime?
   // 공개 PNG lifecycle state. 정리 실패는 전송 상태와 분리해 기록하고 다음 크론에서 재시도한다.
@@ -1166,6 +1168,7 @@ model AlimtalkMessage {
   recipient    String // 암호화 저장 (src/lib/pii.ts encryptString)
   message      String // 변수 치환이 끝난 최종 본문. 템플릿과 글자 단위로 일치해야 한다.
   buttons      Json? // attach.button[] 원형
+  price        Int? // 본문에 금액이 있는 템플릿만. 릴레이가 price/currencyType 으로 실어 보낸다.
 
   userId  String?
   refType String? // "quote" | "consult" | "review"
