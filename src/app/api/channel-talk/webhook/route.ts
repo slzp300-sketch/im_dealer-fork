@@ -1,8 +1,12 @@
-// 채널톡 웹훅 수신 — 고객이 카카오 채널로 보낸 요청번호를 받아 견적서를 발송한다.
+// 채널톡 웹훅 수신 — 상담을 연 고객을 식별해 대기 중인 견적서를 발송한다.
 //
-// 흐름: 고객이 견적서 받기 클릭 → 요청번호가 담긴 문구를 카카오 채널로 전송 →
-// 상담이 열림 → 채널톡이 이 라우트를 호출 → 요청번호로 대기 중인 견적서를 찾아 적재.
+// 흐름: 고객이 견적서 받기 클릭 → 상담전환톡 발송(대기) → 고객이 버튼 클릭 →
+// 상담이 열림 → 채널톡이 이 라우트를 호출 → 대기 중인 견적서를 찾아 적재.
 // 견적서가 나가기 전에 상담이 먼저 열리도록 하려는 구조다.
+//
+// 매칭은 두 단계다. ① 메시지에 요청번호가 있으면 그것으로(가장 확실),
+// ② 없으면 personId 로 채널톡 프로필을 조회해 전화번호로 찾는다 — 카카오 상담톡은
+// chat_extra 등 상담 정보를 채널톡에 넘기지 않아(채널톡 공식 확인) ②가 기본 경로다.
 //
 // 인증: 채널톡의 서명 헤더 규격을 확인하기 전까지는 우리가 발급한 토큰을 웹훅 URL 의
 // 쿼리로 받아 대조한다(채널톡 콘솔에 등록하는 URL 에 붙인다). 규격을 확인하면 서명
@@ -12,7 +16,12 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { checkRateLimit, strictRateLimit } from "@/lib/rate-limit";
 import { extractQuoteRequestCode } from "@/lib/quote-delivery/request-code";
-import { dispatchQuoteDeliveryByRequestCode } from "@/lib/quote-delivery/dispatch";
+import {
+  dispatchQuoteDeliveryByPhone,
+  dispatchQuoteDeliveryByRequestCode,
+  hasAwaitingQuoteDelivery,
+} from "@/lib/quote-delivery/dispatch";
+import { fetchChannelTalkUserPhone } from "@/lib/channel-talk-open-api";
 
 export const runtime = "nodejs";
 
@@ -22,6 +31,18 @@ function tokenMatches(provided: string | null): boolean {
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * 대기 모드에서 전화번호 매칭을 쓸 수 있는지 — deliver 와 같은 규칙을 따른다.
+ * 대기 모드는 견적 페이지가 채널톡 유도 흐름을 탈 때(자동발송 OFF)만 의미가 있어,
+ * 자동발송이 켜진 조합에선 대기를 보지 않는다(견적서가 이미 나갔다).
+ */
+function isAwaitMatchingEnabled(): boolean {
+  return (
+    process.env.QUOTE_DELIVERY_AWAIT_MESSAGE === "true" &&
+    process.env.NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND !== "true"
+  );
 }
 
 /**
@@ -126,24 +147,80 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, skipped: "other_type" });
   }
 
-  if (!requestCode) {
-    // 요청번호 없는 일반 문의가 대부분이다. 상담은 이미 열렸고 상담사가 이어받는다.
-    return NextResponse.json({ ok: true, skipped: "no_request_code" });
-  }
-
   try {
-    const result = await dispatchQuoteDeliveryByRequestCode(requestCode);
+    if (requestCode) {
+      const result = await dispatchQuoteDeliveryByRequestCode(requestCode);
+      if (!result.ok) {
+        console.warn(`[channel-talk webhook] 발송 안 함 — ${result.reason}`);
+        return NextResponse.json({ ok: true, skipped: result.reason });
+      }
+      // 요청번호와 deliveryId 는 로그·응답에 실지 않는다. 견적서 링크가 유출되면
+      // 아무나 열어볼 수 있으므로, 어드민 발송 이력으로 대신 추적한다.
+      console.log(`[channel-talk webhook] 견적서 적재`);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 요청번호가 없으면 전화번호 매칭으로 넘어간다. 카카오 상담톡은 chat_extra 등
+    // 상담 정보를 채널톡에 넘기지 않아(채널톡 공식 확인) 요청번호가 자동으로 실려
+    // 올 수 없다 — 상담을 연 고객이 "누구인지"(personId → 프로필 전화번호)로 대기
+    // 중인 견적서를 찾는다. 일반 문의는 대기 건이 없어 그대로 지나간다.
+    const personId = extractCustomerPersonId(body);
+    if (!personId) {
+      return NextResponse.json({ ok: true, skipped: "no_request_code" });
+    }
+
+    // 대기 모드가 꺼졌으면 매칭할 대기 건이 만들어지지 않으므로 Open API 조회 없이
+    // 닫는다. 대기 건이 있는지는 [status, createdAt] 인덱스로 존지만 싼 값에 본다.
+    if (!isAwaitMatchingEnabled()) {
+      return NextResponse.json({ ok: true, skipped: "await_disabled" });
+    }
+    if (!(await hasAwaitingQuoteDelivery())) {
+      return NextResponse.json({ ok: true, skipped: "no_awaiting" });
+    }
+
+    const lookup = await fetchChannelTalkUserPhone(personId);
+    // 관측용 — 카카오 경유 고객의 프로필에 번호가 실리는지가 이 설계의 판정 기준이다.
+    // 번호 값 자체는 남기지 않는다.
+    console.log(
+      `[channel-talk webhook] profile ok=${lookup.ok} phone=${lookup.phone ? "present" : "absent"} profileKeys=${lookup.profileKeys.join(",")}`
+    );
+    if (!lookup.phone) {
+      return NextResponse.json({ ok: true, skipped: "no_phone" });
+    }
+
+    const result = await dispatchQuoteDeliveryByPhone(lookup.phone);
     if (!result.ok) {
-      console.warn(`[channel-talk webhook] 발송 안 함 — ${result.reason}`);
+      // not_found 는 "대기 중인 견적서가 없는 일반 상담"이라 정상 경로다.
+      if (result.reason !== "not_found") {
+        console.warn(`[channel-talk webhook] 전화번호 매칭 발송 안 함 — ${result.reason}`);
+      }
       return NextResponse.json({ ok: true, skipped: result.reason });
     }
-    // 요청번호와 deliveryId 는 로그·응답에 실지 않는다. 견적서 링크가 유출되면
-    // 아무나 열어볼 수 있으므로, 어드민 발송 이력으로 대신 추적한다.
-    console.log(`[channel-talk webhook] 견적서 적재`);
+    console.log(`[channel-talk webhook] 견적서 적재 (전화번호 매칭)`);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[channel-talk webhook]", error);
     // 재시도 폭주를 막으려 200 으로 닫는다. 누락 건은 어드민에서 수동 발송한다.
     return NextResponse.json({ ok: true, skipped: "error" });
   }
+}
+
+/**
+ * 웹훅 entity 에서 "고객" 의 person id 를 찾는다. 상담사·봇 메시지에도 웹훅이
+ * 오므로 personType 이 user 일 때만 쓴다 — personId 요구와 userId 폴백에 같은
+ * 조건을 둔다. 유저챗 생성 이벤트는 personId 대신 userId 를 실을 수 있어 함께 본다.
+ */
+export function extractCustomerPersonId(body: unknown): string | null {
+  const entity = (body as { entity?: unknown } | null)?.entity;
+  if (!entity || typeof entity !== "object") return null;
+  const record = entity as Record<string, unknown>;
+
+  // userId 폴백에도 같은 조건이 필요하다. 매니저·봇 이벤트(또는 타입이 안 온
+  // 이벤트)의 id 로 프로필을 조회해 남의 견적서를 보내는 일이 없도록 한다.
+  if (record.personType !== "user") return null;
+  if (typeof record.personId === "string" && record.personId) {
+    return record.personId;
+  }
+  if (typeof record.userId === "string" && record.userId) return record.userId;
+  return null;
 }

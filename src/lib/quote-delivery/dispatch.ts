@@ -5,6 +5,7 @@
 // 어드민의 수동 발송도 같은 경로를 쓴다 — 발송 조건을 한 곳에만 둔다.
 
 import { prisma } from "@/lib/prisma";
+import { toDomesticKR, toE164KR } from "@/lib/phone";
 import { enqueueAlimtalk } from "@/lib/alimtalk/enqueue";
 import {
   buildQuoteDeliveredButtons,
@@ -57,6 +58,75 @@ export function dispatchQuoteDeliveryByRequestCode(
 /** 어드민 수동 발송 — 고객이 요청번호를 빼고 보낸 건을 상담사가 직접 내보낸다. */
 export function dispatchQuoteDeliveryById(deliveryId: string): Promise<DispatchResult> {
   return dispatchQuoteDelivery({ id: deliveryId });
+}
+
+// 열람 링크 TTL 과 같은 30일. 그보다 오래된 대기 건은 링크가 만료돼 보내도 죽은
+// 링크라, 전화번호 매칭 대상에서 제외하고 어드민 화면에만 남긴다.
+const PHONE_MATCH_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * 대기 건이 하나라도 있는지. 전화번호 매칭은 채널톡 Open API 조회(웹훅)를 수반하므로
+ * 이 앞에 두면 대기 건이 없는 일반 상담엔 API 를 쓰지 않는다. 전화번호를 훑지 않고
+ * [status, createdAt] 인덱스에서 id 하나만 읽는 가장 싼 쿼리다.
+ */
+export function hasAwaitingQuoteDelivery(): Promise<boolean> {
+  return prisma.quoteDelivery
+    .findFirst({
+      where: {
+        status: "AWAITING_MESSAGE",
+        createdAt: { gte: new Date(Date.now() - PHONE_MATCH_WINDOW_MS) },
+      },
+      select: { id: true },
+    })
+    .then((delivery) => delivery !== null);
+}
+
+/**
+ * toE164KR 이 판정한 번호가 User.phone 에 저장돼 있을 수 있는 형태들. 가입 경로에
+ * 따라 저장 형식이 섞여 있어 하나로 통일돼 있지 않다 — 같은 번호의 변형을 전부
+ * 조건에 넣어 DB 등가 비교로 정확히 걷는다.
+ */
+function phoneVariants(e164: string): string[] {
+  const digits = `0${e164.slice(3)}`; // "+8210…" → "010…"
+  return [
+    e164, // +821012345678
+    digits, // 01012345678
+    toDomesticKR(digits) ?? digits, // 010-1234-5678
+    `+82 ${digits.slice(1, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`, // +82 10-1234-5678
+  ];
+}
+
+/**
+ * 전화번호 매칭 — 카카오 상담톡은 chat_extra 등 상담 정보를 채널톡에 넘기지 않아
+ * (채널톡 공식 확인), 상담을 연 고객이 "누구인지"로 대기 건을 찾는 수밖에 없다.
+ * 같은 고객의 대기 건이 여럿이면 가장 최근 것 하나만 보낸다 — 방금 요청한 건이
+ * 고객이 기다리는 그것이고, 이전 건들은 어드민 대기 목록에 그대로 남는다.
+ */
+export async function dispatchQuoteDeliveryByPhone(
+  phone: string
+): Promise<DispatchResult> {
+  const target = toE164KR(phone);
+  if (!target) return { ok: false, reason: "not_found" };
+
+  // 저장 형식 변형을 조건에 넣어 User 를 먼저 찾는다. 대기 건 전체를 훑지 않으므로
+  // 대기 건이 늘어도 후보 상한으로 조용히 빠지는 일이 없다.
+  const users = await prisma.user.findMany({
+    where: { phone: { in: phoneVariants(target) } },
+    select: { id: true },
+  });
+  if (users.length === 0) return { ok: false, reason: "not_found" };
+
+  const matched = await prisma.quoteDelivery.findFirst({
+    where: {
+      userId: { in: users.map((user) => user.id) },
+      status: "AWAITING_MESSAGE",
+      createdAt: { gte: new Date(Date.now() - PHONE_MATCH_WINDOW_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!matched) return { ok: false, reason: "not_found" };
+  return dispatchQuoteDelivery({ id: matched.id });
 }
 
 async function dispatchQuoteDelivery(
