@@ -140,7 +140,20 @@ export async function checkRateLimit(
   const ip = getTrustedClientIp(request.headers) ?? "unknown";
   const identifier = identifierSuffix ? `${ip}:${identifierSuffix}` : ip;
 
-  const { success, limit, remaining, reset } = await limiter.limit(identifier);
+  // fail-open: Upstash 장애·쿼터 초과 시 제한 없이 통과시킨다.
+  // rate limit 인프라 장애가 라우트 500 으로 번지는 것을 막는다 (proxy.ts 와 동일 정책).
+  let verdict: Awaited<ReturnType<Ratelimit["limit"]>>;
+  try {
+    verdict = await limiter.limit(identifier);
+  } catch (error: unknown) {
+    console.error("[rate-limit] limiter check failed — failing open", {
+      route: identifierSuffix ?? "api",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+
+  const { success, limit, remaining, reset } = verdict;
   if (!success) {
     return NextResponse.json(
       { error: "잠시 후 다시 시도해 주세요." },

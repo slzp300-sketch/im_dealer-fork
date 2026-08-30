@@ -112,6 +112,23 @@ describe("route-level rate limiters (T37/C6)", () => {
     }
   );
 
+  it("fails open (null 반환) when the limiter throws — rate limit 인프라 장애가 라우트 500으로 번지면 안 된다", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    limiterState.limit.mockRejectedValue(
+      new Error("ERR max requests limit exceeded. Limit: 500000, Usage: 500001")
+    );
+    const { checkRateLimit, quoteSaveRateLimit } = await import("./rate-limit");
+
+    const blocked = await checkRateLimit(request("203.0.113.10"), quoteSaveRateLimit, "quote-save");
+
+    expect(blocked).toBeNull();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("fail"),
+      expect.anything()
+    );
+    error.mockRestore();
+  });
+
   it("uses a per-route identifier so shared NAT IPs are not collapsed across routes", async () => {
     limiterState.limit.mockResolvedValue({
       success: true,

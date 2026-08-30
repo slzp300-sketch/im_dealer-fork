@@ -44,9 +44,20 @@ export default async function middleware(request: NextRequest) {
         console.warn("[proxy] client IP unavailable — using unknown bucket", { pathname });
       }
       const rateKey = ip ?? (isProdRemote ? "unknown" : "local-dev");
-      const { success, limit, reset, remaining } = await ratelimit.limit(rateKey);
+      // fail-open: Upstash 장애·쿼터 초과가 전 API 500 으로 번지면 안 된다.
+      // 제한이 잠시 풀리는 것이 서비스 전면 장애보다 낫다.
+      let verdict: Awaited<ReturnType<typeof ratelimit.limit>> | null = null;
+      try {
+        verdict = await ratelimit.limit(rateKey);
+      } catch (error: unknown) {
+        console.error("[proxy] rate limit check failed — failing open", {
+          pathname,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
-      if (!success) {
+      if (verdict && !verdict.success) {
+        const { limit, reset, remaining } = verdict;
         return NextResponse.json(
           { error: "Too many requests. Please try again later." },
           {
