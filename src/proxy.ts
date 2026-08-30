@@ -1,7 +1,5 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { getTrustedClientIp } from "@/lib/client-ip";
-import { apiRateLimit, strictRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { ADMIN_ROLES } from "@/lib/admin-roles";
 import {
@@ -12,66 +10,16 @@ import {
 // Next 16 의 proxy.ts 는 항상 Node.js 런타임으로 실행됨 → runtime export 불필요.
 // Prisma 직접 호출 가능. https://nextjs.org/docs/messages/middleware-to-proxy
 
-function isLocalHostname(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-}
+// rate limit 은 proxy 광역 게이트가 아니라 민감 라우트에서만 검사한다
+// (checkRateLimit + 라우트별 limiter). 모든 /api/* 가 요청당 Redis 커맨드를
+// 소모하면 Upstash 무료 쿼터(월 50만)가 트래픽에 비례해 소진되기 때문
+// (2026-08-30 쿼터 소진 장애의 재발 방지).
 
 export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAdminPage = pathname.startsWith("/admin");
   const isAdminApi = pathname.startsWith("/api/admin");
-
-  // ── API 라우트 Rate Limit 보호 ────────────────────────────────────
-  // strict: 실제로 리소스 무거운 / 어뷰징 위험 큰 경로만 (AI 추천, 이미지 생성, 파일 업로드)
-  // 단순 견적 조회/계산/저장은 일반 apiRateLimit 으로 강등 — 비교/옵션 변경 시 정상 사용자가 걸리지 않게
-  const isUploadApi = pathname === "/api/admin/upload";
-  const isCronApi = pathname.startsWith("/api/cron/");
-  // cron 은 CRON_SECRET Bearer 가 본 인증. Vercel cron 은 XFF 가 없어
-  // IP 게이트에 넣으면 운영에서 400/unknown 공용 버킷을 소진한다.
-  if (pathname.startsWith("/api/") && !isCronApi && (!isAdminApi || isUploadApi)) {
-    const isStrictApi =
-      isUploadApi ||
-      pathname.startsWith("/api/recommend") ||
-      pathname === "/api/quote/image";
-    const ratelimit = isStrictApi ? strictRateLimit : apiRateLimit;
-
-    if (ratelimit) {
-      const ip = getTrustedClientIp(request.headers);
-      const isProdRemote =
-        process.env.NODE_ENV === "production" && !isLocalHostname(request.nextUrl.hostname);
-      if (!ip && isProdRemote) {
-        console.warn("[proxy] client IP unavailable — using unknown bucket", { pathname });
-      }
-      const rateKey = ip ?? (isProdRemote ? "unknown" : "local-dev");
-      // fail-open: Upstash 장애·쿼터 초과가 전 API 500 으로 번지면 안 된다.
-      // 제한이 잠시 풀리는 것이 서비스 전면 장애보다 낫다.
-      let verdict: Awaited<ReturnType<typeof ratelimit.limit>> | null = null;
-      try {
-        verdict = await ratelimit.limit(rateKey);
-      } catch (error: unknown) {
-        console.error("[proxy] rate limit check failed — failing open", {
-          pathname,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      if (verdict && !verdict.success) {
-        const { limit, reset, remaining } = verdict;
-        return NextResponse.json(
-          { error: "Too many requests. Please try again later." },
-          {
-            status: 429,
-            headers: {
-              "X-RateLimit-Limit": limit.toString(),
-              "X-RateLimit-Remaining": remaining.toString(),
-              "X-RateLimit-Reset": reset.toString(),
-            },
-          }
-        );
-      }
-    }
-  }
 
   // ── 요청 헤더에 현재 경로 주입 (서버 컴포넌트에서 pathname 인지용) ────
   const requestHeaders = new Headers(request.headers);

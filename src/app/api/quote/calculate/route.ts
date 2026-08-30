@@ -18,7 +18,6 @@ import {
   SCENARIO_CONDITIONS,
 } from "@/constants/quote-defaults";
 import { gateQuoteScenariosForGuest } from "@/lib/member-gate";
-import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { EXTRA_OPTIONS_PRICE_MAX } from "@/app/api/quote/save/request-schema";
 import { PUBLIC_TRIM_WHERE } from "@/lib/vehicle-visibility-policy";
 import { upsertQuoteCalcLogs } from "@/lib/quote-calc-log";
@@ -42,9 +41,6 @@ const calculateSchema = z.object({
 // 독립 견적 계산 엔드포인트 (3개 시나리오 반환)
 export async function POST(request: NextRequest) {
   try {
-    const limited = await checkRateLimit(request, apiRateLimit);
-    if (limited) return limited;
-
     const body = await request.json();
     const input = calculateSchema.parse(body);
 

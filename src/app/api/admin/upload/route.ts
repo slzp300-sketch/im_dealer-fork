@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAction } from "@/lib/audit";
+import { checkRateLimit, strictRateLimit } from "@/lib/rate-limit";
 import { requireRoleAtLeast } from "@/lib/require-admin";
 import {
   ADMIN_UPLOAD_ALLOWED_MIME,
@@ -14,6 +15,11 @@ const CATEGORY_SET = new Set<string>(ADMIN_UPLOAD_CATEGORIES);
 export async function POST(req: NextRequest) {
   const { admin, error: authError } = await requireRoleAtLeast("staff");
   if (authError) return authError;
+
+  // 인증 뒤에 검사 — 비인증 폭주가 Redis 쿼터를 소모하지 않게 한다.
+  // proxy 광역 게이트 제거 후 업로드의 유일한 rate limit 방어선.
+  const limited = await checkRateLimit(req, strictRateLimit, "admin-upload");
+  if (limited) return limited;
 
   try {
     const formData = await req.formData();

@@ -22,7 +22,6 @@ import {
   isPublicQuoteResultRates,
 } from "@/lib/member-gate";
 import { hashIp, getClientIp } from "@/lib/ip-hash";
-import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { EXTRA_OPTIONS_PRICE_MAX } from "@/app/api/quote/save/request-schema";
 import { PUBLIC_TRIM_WHERE } from "@/lib/vehicle-visibility-policy";
 import { upsertQuoteCalcLog } from "@/lib/quote-calc-log";
@@ -60,9 +59,6 @@ export async function POST(
 ) {
   try {
     const { slug } = await params;
-
-    const limited = await checkRateLimit(request, apiRateLimit);
-    if (limited) return limited;
 
     const body = await request.json();
     const input = quoteSchema.parse(body);

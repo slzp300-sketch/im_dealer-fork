@@ -3,7 +3,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hashIp, getClientIp } from "@/lib/ip-hash";
 import { requireRoleAtLeast } from "@/lib/require-admin";
-import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 // 견적 조회 이벤트 = car_click → quote_start 흐름을 한 번에 기록
 const quoteViewSchema = z.object({
@@ -19,9 +18,6 @@ const quoteViewSchema = z.object({
 // 차량 상세 페이지에서 견적 조건 변경·확인 시 기록
 export async function POST(request: NextRequest) {
   try {
-    const limited = await checkRateLimit(request, apiRateLimit);
-    if (limited) return limited;
-
     const body = await request.json();
     const data = quoteViewSchema.parse(body);
 

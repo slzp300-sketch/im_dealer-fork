@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const limiterState = vi.hoisted(() => ({
   limit: vi.fn(),
   slidingWindowCalls: [] as Array<{ tokens: number; window: string }>,
-  constructors: [] as Array<{ prefix: string; limiter: { tokens: number; window: string } }>,
+  constructors: [] as Array<{
+    prefix: string;
+    limiter: { tokens: number; window: string };
+    analytics: boolean | undefined;
+  }>,
 }));
 
 vi.mock("@upstash/ratelimit", () => ({
@@ -17,10 +21,15 @@ vi.mock("@upstash/ratelimit", () => ({
     static tokenBucket() {
       return {};
     }
-    constructor(opts: { prefix: string; limiter: { tokens: number; window: string } }) {
+    constructor(opts: {
+      prefix: string;
+      limiter: { tokens: number; window: string };
+      analytics?: boolean;
+    }) {
       limiterState.constructors.push({
         prefix: opts.prefix,
         limiter: opts.limiter,
+        analytics: opts.analytics,
       });
     }
     limit = limiterState.limit;
@@ -111,6 +120,22 @@ describe("route-level rate limiters (T37/C6)", () => {
       });
     }
   );
+
+  it("어떤 limiter도 Upstash analytics를 켜지 않는다 — 요청당 커맨드 소모 절감 (쿼터 보호)", async () => {
+    await import("./rate-limit");
+
+    expect(limiterState.constructors.length).toBeGreaterThan(0);
+    for (const built of limiterState.constructors) {
+      expect(built.analytics).toBeUndefined();
+    }
+  });
+
+  it("광역 apiRateLimit은 제거됨 — 일반 API는 더 이상 Redis를 소모하지 않는다", async () => {
+    const rateLimit: Record<string, unknown> = await import("./rate-limit");
+
+    expect(rateLimit.apiRateLimit).toBeUndefined();
+    expect(rateLimit.strictRateLimit).toBeTruthy();
+  });
 
   it("fails open (null 반환) when the limiter throws — rate limit 인프라 장애가 라우트 500으로 번지면 안 된다", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);

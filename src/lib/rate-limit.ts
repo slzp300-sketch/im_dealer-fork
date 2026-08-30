@@ -29,18 +29,9 @@ if (
   );
 }
 
-// 1. 일반 API용 속도 제한 (차량 목록/상세, 견적 조회·계산·저장, 비교 견적 등)
-// 10초당 최대 40회 요청 허용 (Sliding Window 방식)
-// 비교 차량 변경·옵션 변경 시 짧은 시간에 여러 호출이 눅되어도 정상 사용자는 걸리지 않도록 완화.
-export const apiRateLimit = redis
-  ? new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(40, "10 s"),
-      ephemeralCache: cache,
-      analytics: true,
-      prefix: "ratelimit:api",
-    })
-  : null;
+// 광역 apiRateLimit(모든 /api/* 요청당 1커맨드)은 제거됨 — Upstash 무료 쿼터가
+// 트래픽에 비례해 소진되던 원인. 아래 민감 라우트용 limiter 만 유지한다.
+// analytics 도 전부 끔(요청당 추가 커맨드 소모).
 
 // 2. 무거운/민감한 API용 속도 제한 (AI 추천, 이미지 생성, 파일 업로드)
 // 1분당 최대 30회 요청 허용 (Token Bucket 방식)
@@ -50,7 +41,6 @@ export const strictRateLimit = redis
       redis,
       limiter: Ratelimit.tokenBucket(30, "1 m", 30),
       ephemeralCache: cache,
-      analytics: true,
       prefix: "ratelimit:strict",
     })
   : null;
@@ -61,7 +51,6 @@ export const likeRateLimit = redis
       redis,
       limiter: Ratelimit.slidingWindow(10, "10 s"),
       ephemeralCache: cache,
-      analytics: true,
       prefix: "ratelimit:like",
     })
   : null;
@@ -73,7 +62,6 @@ export const easyAuthRateLimit = redis
       redis,
       limiter: Ratelimit.slidingWindow(3, "1 m"),
       ephemeralCache: cache,
-      analytics: true,
       prefix: "ratelimit:easyauth",
     })
   : null;
@@ -84,7 +72,6 @@ export const quoteSaveRateLimit = redis
       redis,
       limiter: Ratelimit.slidingWindow(10, "1 m"),
       ephemeralCache: cache,
-      analytics: true,
       prefix: "ratelimit:quote-save",
     })
   : null;
@@ -95,7 +82,6 @@ export const referralRedeemRateLimit = redis
       redis,
       limiter: Ratelimit.slidingWindow(5, "1 m"),
       ephemeralCache: cache,
-      analytics: true,
       prefix: "ratelimit:referral-redeem",
     })
   : null;
@@ -106,7 +92,6 @@ export const withdrawRateLimit = redis
       redis,
       limiter: Ratelimit.slidingWindow(3, "1 m"),
       ephemeralCache: cache,
-      analytics: true,
       prefix: "ratelimit:withdraw",
     })
   : null;
@@ -117,7 +102,6 @@ export const reviewImageRateLimit = redis
       redis,
       limiter: Ratelimit.slidingWindow(20, "1 m"),
       ephemeralCache: cache,
-      analytics: true,
       prefix: "ratelimit:review-image",
     })
   : null;

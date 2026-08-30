@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 
 // ─── 스키마 ─────────────────────────────────────────────
 const clickSchema = z.object({
@@ -14,9 +13,6 @@ const clickSchema = z.object({
 // 추천 결과에서 차량 클릭 or 견적 진행 시 로그 업데이트
 export async function PATCH(request: NextRequest) {
   try {
-    const limited = await checkRateLimit(request, apiRateLimit);
-    if (limited) return limited;
-
     const body = await request.json();
     const data = clickSchema.parse(body);
 

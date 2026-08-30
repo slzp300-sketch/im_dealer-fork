@@ -39,7 +39,7 @@ function request(pathname: string, hostname = "imdealer.com"): NextRequest {
   });
 }
 
-describe("proxy rate-limit IP gate (T38/C3+C10)", () => {
+describe("proxy — rate limit은 라우트 레벨로 이관 (Upstash 쿼터 절감)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("NODE_ENV", "production");
@@ -63,61 +63,23 @@ describe("proxy rate-limit IP gate (T38/C3+C10)", () => {
     vi.unstubAllEnvs();
   });
 
-  it("does not 400 production API traffic when the client IP is missing", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const { default: middleware } = await import("./proxy");
-
-    const response = await middleware(request("/api/quote/save"));
-
-    expect(response.status).not.toBe(400);
-    expect(mocks.apiLimit).toHaveBeenCalledWith("unknown");
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("unknown"),
-      expect.anything(),
-    );
-    warn.mockRestore();
-  });
-
-  it("skips the IP rate-limit gate for /api/cron/* (Vercel cron has no XFF)", async () => {
-    const { default: middleware } = await import("./proxy");
-
-    const response = await middleware(request("/api/cron/outbound-sweep"));
-
-    expect(response.status).not.toBe(400);
-    expect(mocks.apiLimit).not.toHaveBeenCalled();
-    expect(mocks.getTrustedClientIp).not.toHaveBeenCalled();
-  });
-
-  it("fails open when the rate limiter throws — Upstash 장애가 API 전면 500으로 번지면 안 된다", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    mocks.getTrustedClientIp.mockReturnValue("203.0.113.10");
-    mocks.apiLimit.mockRejectedValue(
-      new Error("ERR max requests limit exceeded. Limit: 500000, Usage: 500001")
-    );
+  it("일반 API 경로에서 limiter를 호출하지 않는다 — 요청당 Redis 커맨드 소모 금지", async () => {
     const { default: middleware } = await import("./proxy");
 
     const response = await middleware(request("/api/quote/save"));
 
     expect(response.status).toBe(200);
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining("fail"),
-      expect.objectContaining({ pathname: "/api/quote/save" })
-    );
-    error.mockRestore();
+    expect(mocks.apiLimit).not.toHaveBeenCalled();
+    expect(mocks.getTrustedClientIp).not.toHaveBeenCalled();
   });
 
-  it("still returns 429 when the limiter resolves with success=false (fail-open은 에러에만 적용)", async () => {
-    mocks.getTrustedClientIp.mockReturnValue("203.0.113.10");
-    mocks.apiLimit.mockResolvedValue({
-      success: false,
-      limit: 40,
-      remaining: 0,
-      reset: Date.now() + 10_000,
-    });
+  it("구 strict 경로(추천·견적이미지·업로드)도 proxy에선 미호출 — 라우트 레벨 체크로 단일화", async () => {
     const { default: middleware } = await import("./proxy");
 
-    const response = await middleware(request("/api/quote/save"));
+    await middleware(request("/api/recommend"));
+    await middleware(request("/api/quote/image"));
+    await middleware(request("/api/admin/upload"));
 
-    expect(response.status).toBe(429);
+    expect(mocks.apiLimit).not.toHaveBeenCalled();
   });
 });
