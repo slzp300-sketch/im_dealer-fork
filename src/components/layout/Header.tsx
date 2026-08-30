@@ -10,7 +10,7 @@ import {
   useChannelTalkStatus,
 } from "@/lib/channel-talk-status";
 import { cn } from "@/lib/utils";
-import { HeaderCallButton } from "@/components/layout/HeaderCallButton";
+import { HeaderConsultButton } from "@/components/layout/HeaderConsultButton";
 import { MyMenuButton } from "@/components/layout/MyMenuButton";
 
 const NAV_LINKS = [
@@ -96,9 +96,9 @@ export function Header() {
             )}
           </nav>
 
-          {/* 우측: 전화 + My */}
+          {/* 우측: 상담 + My */}
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-            <HeaderCallButton />
+            <HeaderConsultButton />
             <MyMenuButton />
           </div>
         </div>
