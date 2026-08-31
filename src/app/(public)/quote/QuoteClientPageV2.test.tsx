@@ -467,6 +467,34 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     await waitFor(() => expect(supabaseMock.signInWithOAuth).toHaveBeenCalledTimes(1));
   });
 
+  it("closes the delivery login gate back to the quote result without starting login", async () => {
+    writeCalculatedRestore();
+    supabaseMock.getUser.mockResolvedValue({ data: { user: null } });
+    const fetchMock = createFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<QuoteClientPageV2 vehicles={vehicles} />);
+    fireEvent.click(await screen.findByRole("button", { name: "카카오톡으로 견적서 받기" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "로그인 없이 계속 견적 확인하기" })
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "카톡으로 견적서 보내드릴게요" })
+      ).not.toBeInTheDocument()
+    );
+    expect(supabaseMock.signInWithOAuth).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/quote/deliver", expect.anything());
+    // 닫으면 견적 결과 화면 그대로 — 하단 견적서 받기 바가 다시 노출된다.
+    expect(screen.getByRole("region", { name: "견적서 받기" })).toBeInTheDocument();
+  });
+
   it("routes quote delivery to Kakao channel add when the Kakao flag is disabled (stopgap)", async () => {
     vi.stubEnv("NEXT_PUBLIC_KAKAO_SYNC", "false");
     vi.stubEnv("NEXT_PUBLIC_KAKAO_CHANNEL_PUBLIC_ID", "_TestCh");

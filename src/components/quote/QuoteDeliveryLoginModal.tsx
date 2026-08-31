@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Check, PhoneOff, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 const DELIVERY_PROMISES = [
   "견적 절대 안 변해요 · 다른 데서 비교하고 오셔도 OK",
@@ -97,24 +97,13 @@ export function QuoteDeliveryLoginModal({
           ))}
         </ul>
 
-        <div className="mt-5 rounded-[16px] bg-[linear-gradient(180deg,#17B26A_0%,#0E9C58_100%)] px-5 py-3.5 shadow-[0_8px_20px_rgba(14,156,88,0.25)]">
-          <div className="flex items-center justify-center gap-3">
-            <span
-              aria-hidden
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-[2.5px] border-white/90 text-white"
-            >
-              <PhoneOff size={18} strokeWidth={2.4} />
-            </span>
-            <div className="text-left">
-              <p className="text-[18px] font-extrabold leading-tight text-white">
-                영업전화 절대 안 가요
-              </p>
-              <p className="mt-0.5 text-[12.5px] font-semibold text-[#CDF3DF]">
-                안심하셔도 됩니다
-              </p>
-            </div>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 flex min-h-[52px] w-full items-center justify-center rounded-[16px] border-2 border-[#C3CAD6] bg-[#F2F4F7] px-5 text-[15px] font-bold text-[#374151] transition-colors hover:bg-[#E8EBF0] active:scale-[0.98]"
+        >
+          로그인 없이 계속 견적 확인하기
+        </button>
 
         <button
           type="button"
