@@ -267,6 +267,59 @@ describe("POST /api/worker/scrape-jobs/claim", () => {
     });
   });
 
+  it("등록 후 24시간이 지난 작업은 내려주지 않고 만료 처리한다", async () => {
+    // 사람 로그인 캐피탈사(자격증명 미저장)의 옛 작업 — 자격증명 만료를 타지 않는 케이스
+    mocks.findFirst.mockResolvedValue({
+      id: "job-1",
+      status: "needs_human",
+      financeCompanyId: "fc-1",
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+      credUsernameEnc: null,
+      credPasswordEnc: null,
+      credentialExpiresAt: null,
+    });
+    mocks.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 });
+
+    const res = await POST(claimRequest());
+
+    expect((await res.json()).job).toBeNull();
+    expect(mocks.financeCompanyFindUnique).not.toHaveBeenCalled();
+    expect(mocks.updateMany).toHaveBeenLastCalledWith({
+      where: { id: "job-1", status: "running", leaseToken: expect.any(String) },
+      data: expect.objectContaining({
+        status: "failed",
+        error: "등록 후 24시간이 지나 자동 만료",
+        credUsernameEnc: null,
+        credPasswordEnc: null,
+        leaseToken: null,
+      }),
+    });
+  });
+
+  it("등록 24시간 이내의 작업은 만료 처리 없이 그대로 내려준다", async () => {
+    mocks.findFirst.mockResolvedValue({
+      id: "job-1",
+      status: "pending",
+      financeCompanyId: "fc-1",
+      jobType: "catalog",
+      productType: "장기렌트",
+      params: { mode: "catalog" },
+      createdAt: new Date(Date.now() - 60 * 60 * 1000),
+      credUsernameEnc: null,
+      credPasswordEnc: null,
+      credentialExpiresAt: null,
+    });
+    mocks.updateMany.mockResolvedValue({ count: 1 });
+    mocks.financeCompanyFindUnique.mockResolvedValue({ name: "신한카드" });
+
+    const res = await POST(claimRequest());
+    const body = await res.json();
+
+    expect(body.job?.id).toBe("job-1");
+    // 만료 실패 처리(2번째 updateMany)가 일어나지 않아야 한다
+    expect(mocks.updateMany).toHaveBeenCalledTimes(1);
+  });
+
   it("만료된 자동 로그인 자격증명을 워커에 다시 내려주지 않는다", async () => {
     mocks.findFirst.mockResolvedValue({
       id: "job-1",

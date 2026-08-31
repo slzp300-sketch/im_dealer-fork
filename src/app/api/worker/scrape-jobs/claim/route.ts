@@ -4,7 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { requireWorker } from "@/lib/worker-auth";
 import { resolveCapitalConnection } from "@/lib/scraper/connections";
 import { buildClaimLeaseWhere, buildClaimWorkerWhere, getClaimWorkerId } from "@/lib/scraper/job-state";
-import { SCRAPE_JOB_STALE_HEARTBEAT_MS } from "@/lib/scraper/credential-retention";
+import {
+  SCRAPE_JOB_MAX_AGE_MS,
+  SCRAPE_JOB_STALE_HEARTBEAT_MS,
+} from "@/lib/scraper/credential-retention";
 import { markNamedWorkerSeen, markWorkerSeen } from "@/lib/scraper/worker-presence";
 import { WORKER_PROTOCOL_VERSION } from "@/lib/scraper/worker-version";
 
@@ -74,6 +77,25 @@ export async function POST(request: NextRequest) {
     if (claimed.count !== 1) {
       // 다른 워커가 먼저 가져감 — 다음 폴링에서 재시도
       return NextResponse.json({ job: null });
+    }
+
+    // 등록 후 하루가 지난 작업은 실행하지 않고 폐기한다. 사람 로그인 캐피탈사는
+    // 자격증명을 저장하지 않아 아래 자격증명 만료를 타지 않으므로, 테스트하다 잊힌
+    // 작업이 몇 주 뒤 접속한 워커의 브라우저를 붙잡는 일이 여기서 끊긴다.
+    const jobExpiryCutoff = new Date(now.getTime() - SCRAPE_JOB_MAX_AGE_MS);
+    if (candidate.createdAt && candidate.createdAt <= jobExpiryCutoff) {
+      await db.scrapeJob.updateMany({
+        where: { id: candidate.id, status: "running", leaseToken },
+        data: {
+          status: "failed",
+          error: "등록 후 24시간이 지나 자동 만료",
+          finishedAt: new Date(),
+          credUsernameEnc: null,
+          credPasswordEnc: null,
+          leaseToken: null,
+        },
+      });
+      return NextResponse.json({ job: null, expectedWorkerVersion: WORKER_PROTOCOL_VERSION });
     }
 
     // 크론 실행 시점 사이에 만료된 자동 로그인 암호문을 다시 워커로
