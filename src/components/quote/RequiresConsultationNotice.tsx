@@ -30,7 +30,7 @@ export function RequiresConsultationNotice({ vehicleName }: RequiresConsultation
       <ChannelTalkButton
         vehicleName={vehicleName}
         label="상담하기"
-        className="mt-4 min-h-[48px] rounded-[12px] bg-brand px-4 py-0 text-[14px] font-bold text-surface shadow-lift hover:bg-brand-dark hover:opacity-100"
+        className="mt-4 min-h-[48px] rounded-[12px] px-4 py-0 text-[14px] font-bold shadow-lift"
       />
     </div>
   );

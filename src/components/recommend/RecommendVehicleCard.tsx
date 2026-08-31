@@ -335,9 +335,17 @@ export function RecommendVehicleCard({ vehicle, isTop = false, industry }: Recom
           </p>
         </div>
 
-        {/* 하단 버튼 — AI셀프 견적내기(메인) / 상담하기(보조) */}
+        {/* 하단 버튼 — 상담하기(메인·채널톡 보라) / AI셀프 견적내기(보조) */}
         <div className="space-y-2">
-          {/* AI셀프 견적내기 — 메인 강조 */}
+          {/* 상담하기 — 상담 전환 우선이라 최상단 배치, 색은 채널톡 브랜드 보라(컴포넌트 기본) */}
+          <ChannelTalkButton
+            vehicleName={detail.name}
+            size="sm"
+            label="상담하기"
+            className="min-h-[44px] w-full !rounded-[12px]"
+          />
+
+          {/* AI셀프 견적내기 */}
           <button
             type="button"
             onClick={handleQuote}
@@ -346,14 +354,6 @@ export function RecommendVehicleCard({ vehicle, isTop = false, industry }: Recom
             <AiBadgeIcon className="h-[16px] w-auto shrink-0" />
             셀프 견적내기
           </button>
-
-          {/* 상담하기 — 보조 (테두리) */}
-          <ChannelTalkButton
-            vehicleName={detail.name}
-            size="sm"
-            label="상담하기"
-            className="min-h-[44px] w-full !rounded-[12px] !bg-surface-soft !text-text-body border border-border-subtle hover:!bg-brand-soft hover:!text-brand"
-          />
         </div>
       </div>
     </div>

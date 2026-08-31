@@ -91,7 +91,7 @@ export function LoginBenefitsModal({ open, onClose, onKakaoLogin, onConsultation
         <button
           type="button"
           onClick={onConsultation}
-          className="mt-5 flex min-h-[52px] w-full items-center justify-center rounded-[16px] border-2 border-[#582DFF] bg-[#F3EFFF] px-5 text-[15px] font-bold text-[#582DFF] transition-colors hover:bg-[#EBE4FF] active:scale-[0.98]"
+          className="mt-5 flex min-h-[52px] w-full items-center justify-center rounded-[16px] bg-[var(--color-channeltalk-action)] px-5 text-[15px] font-bold text-[var(--color-channeltalk-ink)] transition-colors hover:bg-[var(--color-channeltalk-action-hover)] active:scale-[0.98]"
         >
           로그인 없이 상담 시작하기
         </button>

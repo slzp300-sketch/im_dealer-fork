@@ -2235,7 +2235,7 @@ function Step3ResultHeader({
               label="선택 조건으로 상담 요청하기"
               onClick={onConsultationRequest}
               loading={isConsultationSubmitting}
-              className="mt-5 h-[48px] rounded-[14px] bg-white px-4 text-[14px] font-bold text-[var(--color-kakao-ink)] hover:bg-white/95"
+              className="mt-5 h-[48px] rounded-[14px] bg-white px-4 text-[14px] font-bold text-[var(--color-channeltalk-action)] hover:bg-white/95"
             />
             {consultationError && (
               <p role="alert" className="mt-3 rounded-[10px] bg-white/10 px-3 py-2 text-[12.5px] leading-relaxed text-[var(--color-brand-ink)]">

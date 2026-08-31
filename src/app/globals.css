@@ -70,6 +70,11 @@
     --color-kakao-action: #FEE500;
     --color-kakao-action-hover: #F7D900;
     --color-kakao-ink: #191919;
+    /* 채널톡 상담 CTA — 채널톡 로고 보라. 채널톡으로 연결되는 상담 버튼은 이 팔레트로 통일한다. */
+    --color-channeltalk-action: #582DFF;
+    --color-channeltalk-action-hover: #4A22E6;
+    --color-channeltalk-ink: #FFFFFF;
+    --color-channeltalk-soft: #F3EFFF;
 
     /* Public aliases kept for existing classes while customer code migrates to semantic names. */
     --public-app-bg: var(--color-app-bg);

@@ -47,7 +47,8 @@ export function ChannelTalkButton({
       title={enabled ? undefined : "잠시 후 다시"}
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-btn font-bold",
-        "bg-text-strong text-surface transition-opacity duration-200 hover:opacity-90",
+        // 채널톡 로고 보라 — 채널톡 진입 버튼 공통 브랜드 색 (globals.css 토큰)
+        "bg-[var(--color-channeltalk-action)] text-[var(--color-channeltalk-ink)] transition-colors duration-200 hover:bg-[var(--color-channeltalk-action-hover)]",
         (loading || !enabled) && "cursor-wait opacity-70",
         size === "md" ? "px-6 py-3 text-sm w-full" : "px-4 py-2 text-[13px]",
         className

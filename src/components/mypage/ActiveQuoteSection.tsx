@@ -74,7 +74,7 @@ export function ActiveQuoteSection({ quote }: { quote: MyPageQuote }) {
               productType={quote.productType}
               contractMonths={quote.contractMonths}
               annualMileage={quote.annualMileage}
-              className="min-h-11 !w-full bg-text-strong"
+              className="min-h-11 !w-full"
             />
           </div>
           <div className="mt-4 flex items-center gap-2 border-t border-border-subtle pt-3 text-[12px] font-semibold text-text-muted">

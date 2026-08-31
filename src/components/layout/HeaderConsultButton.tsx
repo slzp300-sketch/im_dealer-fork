@@ -76,7 +76,7 @@ export function HeaderConsultButton() {
         type="button"
         ref={triggerRef}
         onClick={() => setOpen((current) => !current)}
-        className="flex min-h-11 items-center gap-1.5 rounded-pill border border-brand/30 bg-brand-soft px-3.5 text-[13px] font-bold text-brand shadow-[inset_0_0_0_1px_rgba(39,54,138,0.06)] transition-colors hover:border-brand/50 hover:bg-brand/15 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:gap-2 sm:px-4 sm:text-[14px]"
+        className="flex min-h-11 items-center gap-1.5 rounded-pill bg-[var(--color-channeltalk-action)] px-3.5 text-[13px] font-bold text-[var(--color-channeltalk-ink)] transition-colors hover:bg-[var(--color-channeltalk-action-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:gap-2 sm:px-4 sm:text-[14px]"
         aria-label="상담하기"
         aria-controls="header-consult-panel"
         aria-expanded={open}
@@ -117,7 +117,7 @@ export function HeaderConsultButton() {
                 !channelTalkEnabled && "cursor-wait opacity-70",
               )}
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-channeltalk-soft)] text-[var(--color-channeltalk-action)]">
                 <MessageCircle size={19} strokeWidth={2.1} />
               </span>
               <span className="min-w-0">

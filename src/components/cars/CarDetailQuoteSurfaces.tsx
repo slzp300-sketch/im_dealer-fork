@@ -44,7 +44,7 @@ export function MobileQuoteSummary({
             vehicleName={vehicleName}
             label="상담"
             size="sm"
-            className="min-h-11 shrink-0 rounded-pill border border-line bg-surface px-4 py-2.5 text-[13px] font-bold text-ink hover:bg-surface-muted hover:opacity-100"
+            className="min-h-11 shrink-0 rounded-pill px-4 py-2.5 text-[13px] font-bold"
           />
         </div>
         <Link
@@ -61,7 +61,7 @@ export function MobileQuoteSummary({
 }
 
 const consultBtnClass =
-  "h-14 max-w-full shrink-0 gap-1.5 rounded-full border border-line bg-surface/95 px-5 text-[15px] font-extrabold text-ink shadow-[0_2px_12px_rgb(var(--color-text-strong-rgb)/0.08)] backdrop-blur-md hover:bg-surface-muted hover:opacity-100";
+  "h-14 max-w-full shrink-0 gap-1.5 rounded-full px-5 text-[15px] font-extrabold shadow-[0_2px_12px_rgb(var(--color-text-strong-rgb)/0.08)]";
 
 const quoteBtnClass =
   "cta-ai inline-flex h-14 max-w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-5 text-[15px]";
