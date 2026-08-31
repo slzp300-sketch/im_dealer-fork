@@ -1848,6 +1848,10 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
         open={loginGate === "initialCost"}
         onClose={() => setLoginGate(null)}
         onKakaoLogin={handleGateLogin}
+        onConsultation={() => {
+          setLoginGate(null);
+          void handleConsultationRequest();
+        }}
       />
 
       {/* 견적서 수령 게이트 — 견적서 발송 약속형 마케팅 모달 */}

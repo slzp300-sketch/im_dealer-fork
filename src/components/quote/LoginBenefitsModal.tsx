@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Check, PhoneOff, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 const LOGIN_PERKS = [
   "초기비용 0원 견적 확인",
@@ -13,6 +13,8 @@ interface LoginBenefitsModalProps {
   open: boolean;
   onClose: () => void;
   onKakaoLogin: () => void;
+  /** 로그인 없이 채널톡 상담으로 빠지는 이탈 경로 */
+  onConsultation: () => void;
 }
 
 /**
@@ -20,7 +22,7 @@ interface LoginBenefitsModalProps {
  * 막는 안내가 아니라 로그인하면 얻는 것(혜택 체크리스트)을 파는 전환 모달.
  * 이벤트 프로모션 모달과 같은 캠페인 팔레트(오렌지·그린·카카오)를 쓴다.
  */
-export function LoginBenefitsModal({ open, onClose, onKakaoLogin }: LoginBenefitsModalProps) {
+export function LoginBenefitsModal({ open, onClose, onKakaoLogin, onConsultation }: LoginBenefitsModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -86,24 +88,13 @@ export function LoginBenefitsModal({ open, onClose, onKakaoLogin }: LoginBenefit
           ))}
         </ul>
 
-        <div className="mt-5 rounded-[16px] bg-[linear-gradient(180deg,#17B26A_0%,#0E9C58_100%)] px-5 py-3.5 shadow-[0_8px_20px_rgba(14,156,88,0.25)]">
-          <div className="flex items-center justify-center gap-3">
-            <span
-              aria-hidden
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-[2.5px] border-white/90 text-white"
-            >
-              <PhoneOff size={18} strokeWidth={2.4} />
-            </span>
-            <div className="text-left">
-              <p className="text-[18px] font-extrabold leading-tight text-white">
-                영업전화 절대 안 해요
-              </p>
-              <p className="mt-0.5 text-[12.5px] font-semibold text-[#CDF3DF]">
-                안심하고 마음껏 견적 내보세요
-              </p>
-            </div>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={onConsultation}
+          className="mt-5 flex min-h-[52px] w-full items-center justify-center rounded-[16px] border-2 border-[#582DFF] bg-[#F3EFFF] px-5 text-[15px] font-bold text-[#582DFF] transition-colors hover:bg-[#EBE4FF] active:scale-[0.98]"
+        >
+          로그인 없이 상담 시작하기
+        </button>
 
         <button
           type="button"

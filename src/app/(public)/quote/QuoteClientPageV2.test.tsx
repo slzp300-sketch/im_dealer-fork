@@ -1367,6 +1367,44 @@ describe("QuoteClientPageV2 result first screen", () => {
     expect(screen.getByText((_, node) => node?.textContent === "53만원")).toBeInTheDocument();
   });
 
+  it("starts the channel-talk consultation from the initial-cost gate without login", async () => {
+    writeFirstEntryRestore();
+    supabaseMock.getUser.mockResolvedValue({ data: { user: null } });
+    const fetchMock = createFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+    const channelCalls: unknown[][] = [];
+    window.ChannelIO = (...args: unknown[]) => {
+      channelCalls.push(args);
+    };
+
+    render(<QuoteClientPageV2 vehicles={vehicles} />);
+    await screen.findByText((_, node) => node?.textContent === "53만원");
+
+    fireEvent.click(screen.getByRole("button", { name: /보증금·선납금 없이 시작/ }));
+    expect(await screen.findByRole("dialog", { name: "지금 로그인하면" })).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "로그인 없이 상담 시작하기" })
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "지금 로그인하면" })
+      ).not.toBeInTheDocument()
+    );
+    expect(supabaseMock.signInWithOAuth).not.toHaveBeenCalled();
+    // 견적을 저장한 뒤 상담 컨텍스트를 채널톡으로 넘기고 메신저를 연다.
+    expect(fetchMock).toHaveBeenCalledWith("/api/quote/save", expect.anything());
+    await waitFor(() =>
+      expect(channelCalls.some((call) => call[0] === "showMessenger")).toBe(true)
+    );
+    expect(
+      channelCalls.some(
+        (call) => call[0] === "track" && call[1] === "quote_consultation_requested"
+      )
+    ).toBe(true);
+  });
+
   it("lets a member switch to no-deposit after the first prepay-30 screen", async () => {
     writeFirstEntryRestore();
     supabaseMock.getUser.mockResolvedValue({
