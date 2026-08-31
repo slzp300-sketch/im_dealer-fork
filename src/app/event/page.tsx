@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { Header } from "@/components/layout/Header";
-import { EventConsultBar } from "./EventConsultBar";
+import { EventQuoteBar } from "./EventQuoteBar";
 import { EventConsultCard, VehicleCard, type EventCar } from "./VehicleCard";
 
 export const metadata: Metadata = {
@@ -216,7 +216,7 @@ export default function EventPage() {
           </div>
         </section>
       </div>
-      <EventConsultBar />
+      <EventQuoteBar />
     </div>
   );
 }
