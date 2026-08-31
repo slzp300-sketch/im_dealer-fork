@@ -182,6 +182,8 @@ describe("GET /auth/callback", () => {
 
   it("signs out and redirects with an error when user upsert throws a non-Error value", async () => {
     // upsert 실패 시 유령 세션(DB 행 없는 로그인)을 남기지 않는다.
+    // scope 는 local — 일시적 DB 장애로 이 브라우저의 로그인이 실패했다고
+    // 다른 기기의 멀쩡한 세션까지 무효화하지 않는다(global 은 비활성 계정 전용).
     mocks.upsert.mockRejectedValue("upsert exploded");
 
     const response = await GET(callbackRequest("?code=code-1&next=/mypage"));
@@ -190,7 +192,7 @@ describe("GET /auth/callback", () => {
     expect(response.headers.get("location")).toBe(
       "https://app.example/login?error=signup_failed",
     );
-    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "global" });
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
   it("게스트 견적 capability 쿠키가 있으면 로그인 성공 시 회원 계정에 귀속한다", async () => {

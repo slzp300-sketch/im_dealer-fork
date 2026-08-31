@@ -175,9 +175,11 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     // upsert 실패 시 세션만 살아있는 유령 로그인이 되어 마이페이지·게이트 판정이
-    // 전부 실패한다. account_inactive 와 같은 패턴으로 세션을 정리하고 되돌린다.
+    // 전부 실패한다. 이 브라우저의 세션만 정리하고 되돌린다.
+    // scope 는 local — 일시적 DB 장애로 다른 기기의 멀쩡한 세션까지 무효화하면
+    // "가만히 있어도 로그아웃되는" 사고가 된다. global 은 비활성 계정 차단 전용.
     console.error("[auth/callback] user upsert failed:", message);
-    const { error: signOutError } = await supabase.auth.signOut({ scope: "global" });
+    const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
     if (signOutError) {
       console.error("[auth/callback] failed signup sign-out error:", signOutError.message);
     }
