@@ -86,8 +86,16 @@ async function main(): Promise<void> {
   if (CONNECT_URL) {
     browser = await puppeteer.connect({ browserURL: CONNECT_URL, defaultViewport: null });
     const pages = await browser.pages();
-    page = pages.find((p) => /aict\.bnkcapital\.co\.kr/i.test(p.url())) || pages[pages.length - 1] || (await browser.newPage());
-    console.log(`기존 브라우저에 접속: ${CONNECT_URL}\n  현재 탭: ${page.url()}`);
+    console.log(`기존 브라우저에 접속: ${CONNECT_URL}\n  열린 탭 ${pages.length}개:`);
+    for (const p of pages) console.log(`    - ${p.url() || "(빈 탭)"}`);
+    // 견적 엔진(aict) 탭 우선 → 파트너 포털(bnkcapital) 탭 → 빈 탭이 아닌 탭 → 마지막 탭 순.
+    page =
+      pages.find((p) => /aict\.bnkcapital\.co\.kr/i.test(p.url())) ||
+      pages.find((p) => /bnkcapital\.co\.kr/i.test(p.url())) ||
+      pages.find((p) => p.url() && p.url() !== "about:blank") ||
+      pages[pages.length - 1] ||
+      (await browser.newPage());
+    console.log(`  → 사용할 탭: ${page.url() || "(빈 탭)"}`);
   } else {
     browser = await puppeteer.launch({
       headless: AUTO,
