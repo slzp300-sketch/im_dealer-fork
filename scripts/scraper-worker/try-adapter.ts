@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, isAbsolute } from "node:path";
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-import puppeteer, { type Browser } from "puppeteer";
+import puppeteer, { type Browser, type Page } from "puppeteer";
 import { resolveAdapter } from "./adapters/registry";
 import { buildDraftFromTrimResults } from "./mapping";
 import { buildBrowserLaunchArgs } from "./browser-launch";
@@ -77,19 +77,32 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const browser: Browser = await puppeteer.launch({
-    headless: AUTO,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: [
-      ...buildBrowserLaunchArgs({
-        nodeEnv: process.env.NODE_ENV,
-        disableSandbox: process.env.SCRAPER_DISABLE_SANDBOX === "true",
-      }),
-      "--start-maximized",
-    ],
-    defaultViewport: null,
-  });
-  const page = await browser.newPage();
+  // SCRAPER_CONNECT_URL 이 있으면 이미 열려있는 Chrome(디버깅 포트)에 접속 — 재로그인 없이
+  // 유지된 세션 그대로 검증. 예) Chrome 을 --remote-debugging-port=9222 로 띄우고 로그인·견적내기 후
+  //     SCRAPER_CONNECT_URL=http://localhost:9222 pnpm scraper:try
+  const CONNECT_URL = process.env.SCRAPER_CONNECT_URL;
+  let browser: Browser;
+  let page: Page;
+  if (CONNECT_URL) {
+    browser = await puppeteer.connect({ browserURL: CONNECT_URL, defaultViewport: null });
+    const pages = await browser.pages();
+    page = pages.find((p) => /aict\.bnkcapital\.co\.kr/i.test(p.url())) || pages[pages.length - 1] || (await browser.newPage());
+    console.log(`기존 브라우저에 접속: ${CONNECT_URL}\n  현재 탭: ${page.url()}`);
+  } else {
+    browser = await puppeteer.launch({
+      headless: AUTO,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: [
+        ...buildBrowserLaunchArgs({
+          nodeEnv: process.env.NODE_ENV,
+          disableSandbox: process.env.SCRAPER_DISABLE_SANDBOX === "true",
+        }),
+        "--start-maximized",
+      ],
+      defaultViewport: null,
+    });
+    page = await browser.newPage();
+  }
 
   const isCatalog = cfg.mode === "catalog";
   const params: ScrapeJobParams | CatalogJobParams = isCatalog
@@ -182,7 +195,11 @@ async function main(): Promise<void> {
   } catch (e) {
     console.error("\n[실패]", (e as Error).message);
   } finally {
-    if (AUTO) {
+    if (CONNECT_URL) {
+      // 접속 모드: 사용자의 브라우저를 닫지 않는다 — 연결만 해제.
+      console.log("\n접속 모드: 브라우저는 그대로 둡니다(연결 해제). 다시 검증하려면 같은 명령을 재실행하세요.");
+      browser.disconnect();
+    } else if (AUTO) {
       await browser.close().catch(() => null);
     } else {
       // 대화형: 브라우저를 절대 자동으로 닫지 않는다. 로그인 세션을 유지한 채

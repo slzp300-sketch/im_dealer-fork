@@ -275,26 +275,48 @@ export const bnkAdapter: SiteAdapter = {
     common = null;
     sess = null;
 
-    // aict 로 흐르는 token 을 수동적으로 낚아챈다 (견적내기 진입 시 페이지가 자동 호출).
+    // aict 로 흐르는 token 을 낚아챈다 (견적내기 진입 시 페이지가 자동 호출).
     let captured = "";
     const onReq = (req: { url(): string }) => {
       const m = /aict\.bnkcapital\.co\.kr\/.*[?&]token=([^&]+)/.exec(req.url());
       if (m) captured = decodeURIComponent(m[1]);
     };
+    // 이미 aict 견적 화면(=열려있는 로그인 세션에 connect)한 경우: 재이동/재로그인 없이
+    // Performance API 로 과거 aict 요청 URL 에서 token 을 그대로 읽는다(클릭 불필요).
+    const tokenFromPerf = async (): Promise<string> =>
+      page.evaluate(() => {
+        try {
+          const hit = performance
+            .getEntriesByType("resource")
+            .map((r) => (r as PerformanceResourceTiming).name)
+            .find((u) => /aict\.bnkcapital\.co\.kr\/.*[?&]token=/.test(u));
+          const m = hit ? /[?&]token=([^&]+)/.exec(hit) : null;
+          return m ? decodeURIComponent(m[1]) : "";
+        } catch { return ""; }
+      }).catch(() => "");
+
+    const alreadyAict = /aict\.bnkcapital\.co\.kr/i.test(page.url());
     page.on("request", onReq);
     try {
-      log(`로그인: ${credentials.loginUrl}`);
-      await page.goto(assertHttpUrl(credentials.loginUrl, "loginUrl"), { waitUntil: "networkidle2", timeout: 45000 }).catch(() => null);
-      await sleep(1000);
-      // 키보드보안(TouchEn/raon) — 자동 타이핑 불가. 로그인 + 견적내기 진입까지 사람이 수행.
-      await ctx.waitForHuman(
-        "BNK 파트너 포털에서 로그인한 뒤 '견적내기'를 눌러 견적 화면(aict)까지 진입하고 [재개]를 누르세요."
-      );
-      // 진입 후 token 이 안 잡혔으면, 견적 페이지에서 브랜드 목록을 눌러(자동 호출) 다시 시도하도록 안내.
-      for (let i = 0; i < 20 && !captured; i++) await sleep(500);
+      if (alreadyAict) {
+        log("이미 견적 화면(aict) — 열려있는 세션에서 token 확보 시도");
+        captured = await tokenFromPerf();
+      } else {
+        log(`로그인: ${credentials.loginUrl}`);
+        await page.goto(assertHttpUrl(credentials.loginUrl, "loginUrl"), { waitUntil: "networkidle2", timeout: 45000 }).catch(() => null);
+        await sleep(1000);
+        // 키보드보안(TouchEn/raon) — 자동 타이핑 불가. 로그인 + 견적내기 진입까지 사람이 수행.
+        await ctx.waitForHuman(
+          "BNK 파트너 포털에서 로그인한 뒤 '견적내기'를 눌러 견적 화면(aict)까지 진입하고 [재개]를 누르세요."
+        );
+        for (let i = 0; i < 20 && !captured; i++) await sleep(500);
+        if (!captured) captured = await tokenFromPerf();
+      }
+      // 그래도 못 잡았으면 브랜드를 한 번 눌러 새 요청을 발생시키게 안내.
       if (!captured) {
         await ctx.waitForHuman("견적 화면에서 브랜드를 한 번 선택(목록이 뜨도록)한 뒤 [재개]를 누르세요.");
         for (let i = 0; i < 20 && !captured; i++) await sleep(500);
+        if (!captured) captured = await tokenFromPerf();
       }
     } finally {
       page.off("request", onReq);
