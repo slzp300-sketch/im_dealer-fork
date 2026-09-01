@@ -130,15 +130,29 @@ goodsCode(=상품코드, costData/rentRemain 필수)는 **상품(렌트/리스) 
 
 - (참고) BMW iX2 는 견적을 끝까지 완성하지 않아 `pmtGrand=null` — 버그 아님, 입력 미완성.
 
-## 어댑터 등록 체크리스트 (구현 단계)
+## 어댑터 등록 체크리스트 (구현 완료 — 실사이트 검증만 남음)
 
-- [ ] `adapters/bnk.ts` — `SiteAdapter` 구현 (헤드풀 로그인 → 견적 진입 → token 확보 → aict API 리플레이)
-- [ ] `adapters/registry.ts` — `BNK` 등록 + `inferAdapterFromUrl` 에 `aict.bnkcapital.co.kr` / `web.bnkcapital.co.kr` 호스트 추가
-- [ ] `src/lib/scraper/connections.ts` — 로그인 URL(`PrtnLogn010M01`)·`requiresHuman: true`(키보드보안) 등록
-- [ ] `src/lib/scraper/bnk-brands.ts` + `capital-brands.ts` — brandList_local 의 `brand{code:name}` 로 매핑
-- [ ] 값 계산: brandCM 은 `bnkfg_codes.brandUse[brandCode].map`, 잔가는 `rentRemain.remain[month][km]`, 월납입금은 `costData.cost.pmtGrand`
-- [ ] `try-config.bnk.example.json` 작성 → `SCRAPER_TRY_AUTO=1 pnpm scraper:try` 단독 검증
-- [ ] 표준 조건은 `src/lib/scraper/standard-conditions.ts` 기본값 사용
+- [x] `adapters/bnk.ts` — `SiteAdapter` 구현 (헤드풀 로그인 → 견적 진입 → token 낚아채기 → aict API 리플레이)
+- [x] `adapters/registry.ts` — `BNK` 등록 + `inferAdapterFromUrl` 에 `bnkcapital` 호스트 추가
+- [x] `src/lib/scraper/connections.ts` — 로그인 URL(`PrtnLogn010M01`)·`requiresHuman: true`·`catalogOnly: true` 등록
+- [x] `src/lib/scraper/bnk-brands.ts` + `capital-brands.ts` — 국산 전량 + 주요 수입 등록
+- [x] 값 계산: brandCM=`bnkfg_codes.brandUse[code].map`, 잔가=`rentRemain.remain[month][km]`, 월납입금=`costData.cost.pmtGrand`
+- [x] `try-config.bnk.example.json` + `try-adapter.ts` 에 `mode:"catalog"` 검증 경로 추가
+- [x] 표준 조건: 국산=특판(LT201/LC1110), 수입=비제휴/대리점(LT212/LC1120) — standard-conditions 준수
+- [x] `adapters/bnk.test.ts` — 응답 디코더(raw / rtnData 래핑 / HTML만료 / 압축폭탄 상한) 단위 테스트
+- [ ] **실사이트 단독 검증(워커 PC)**: `try-config.bnk.example.json` → `try-config.json` 복사 후 헤드풀 `pnpm scraper:try`
+      → 안내대로 로그인 + 견적내기 진입 → 현대 아반떼(11896) `36_20000=416900 / 48=393200 / 60=377900` 확인
+
+## 코드 파생 규칙 요약 (어댑터 구현 근거)
+
+- `modelCM` = `"DA" + brandCode` (예 현대 111 → DA111)
+- `lineupCM` = `"DA" + modelIdx` (예 DA11896)
+- `trimCM` = `"DAR" + trimId + 연식4자리` (예 트림 1057427·2027 → DAR10574272027)
+- `brandCM` = 런타임 `bnkfg_codes.brandUse[brandCode].map`
+- `deliveryMaker`/`deliveryShip` = `bnkfg_codes.deliveryShipCost[modelId]`(있으면 .set/.map) 없으면 modelData `model.deliveryShip` → `rentConfig.deliveryShip` 이름 매칭. 수입=LD4999999
+- `deliveryComp` = `rentRemain` 응답의 `deliveryComp`
+- 색상 = modelData `colorExt`/`colorInt` 각 첫 항목(기본색)
+- EV 보조금 = 0 (우리 시스템 관례, WOORIFC 와 동일)
 
 ## 메모
 

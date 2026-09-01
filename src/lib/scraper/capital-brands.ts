@@ -3,6 +3,7 @@ import { ORIX_BRANDS } from "./orix-brands";
 import { WOORIFC_BRANDS } from "./woorifc-brands";
 import { SHINHAN_BRANDS } from "./shinhan-brands";
 import { JBWOORI_BRANDS } from "./jbwoori-brands";
+import { BNK_BRANDS } from "./bnk-brands";
 
 export interface CapitalBrand {
   brandCd: string;
@@ -14,6 +15,7 @@ const CAPITAL_BRANDS: Record<string, CapitalBrand[]> = {
   WOORIFC: WOORIFC_BRANDS,
   SHINHAN: SHINHAN_BRANDS,
   JBWOORI: JBWOORI_BRANDS,
+  BNK: BNK_BRANDS,
 };
 
 /** 어댑터 코드로 카탈로그 브랜드 목록을 얻는다. 미등록이면 빈 배열. */

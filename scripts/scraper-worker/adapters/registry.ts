@@ -4,6 +4,7 @@ import { orixAdapter } from "./orix";
 import { woorifcAdapter } from "./woorifc";
 import { shinhanAdapter } from "./shinhan";
 import { jbwooriAdapter } from "./jbwoori";
+import { bnkAdapter } from "./bnk";
 
 /**
  * 캐피탈사 → 어댑터 매핑.
@@ -16,6 +17,7 @@ const ADAPTERS: Record<string, SiteAdapter> = {
   WOORIFC: woorifcAdapter,
   SHINHAN: shinhanAdapter,
   JBWOORI: jbwooriAdapter,
+  BNK: bnkAdapter,
 };
 
 /** 로그인 URL 호스트 → 어댑터 자동 인식 (config.adapter 미지정 시). */
@@ -27,6 +29,7 @@ function inferAdapterFromUrl(loginUrl?: string): string | null {
     if (host.includes("woorifcapital")) return "WOORIFC";
     if (host.includes("shinhancard")) return "SHINHAN";
     if (host.includes("wooricap")) return "JBWOORI";
+    if (host.includes("bnkcapital")) return "BNK";
   } catch {
     /* 무시 */
   }

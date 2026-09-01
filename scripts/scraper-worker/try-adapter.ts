@@ -7,8 +7,8 @@ import puppeteer, { type Browser } from "puppeteer";
 import { resolveAdapter } from "./adapters/registry";
 import { buildDraftFromTrimResults } from "./mapping";
 import { buildBrowserLaunchArgs } from "./browser-launch";
-import type { AdapterContext } from "./adapters/types";
-import type { ScrapeJobParams, TrimScrapeResult } from "../../src/types/scraper";
+import type { AdapterContext, CatalogScrapeOptions } from "./adapters/types";
+import type { CatalogJobParams, CatalogTrimEntry, ScrapeJobParams, TrimScrapeResult } from "../../src/types/scraper";
 
 /**
  * DB·앱 없이 실제(또는 목) 캐피탈사 사이트에 대고 어댑터만 단독 실행하는 테스트 하니스.
@@ -39,6 +39,9 @@ interface TryConfig {
   // 이름 자동매칭 테스트용 (job.params 로 주입)
   scraperRef?: { brandCd: string; modelName: string };
   trims?: { trimId: string; name: string }[];
+  // 카탈로그 전용 어댑터(BNK/WOORIFC/SHINHAN) 검증용. mode="catalog" 면 scrapeCatalog 실행.
+  mode?: "trim" | "catalog";
+  brands?: { brandCd: string; name: string; modelCds?: string[] }[];
 }
 
 function loadConfig(): TryConfig {
@@ -88,16 +91,24 @@ async function main(): Promise<void> {
   });
   const page = await browser.newPage();
 
-  const params: ScrapeJobParams = {
-    trimIds: cfg.trimIds,
-    vehicleId: "test",
-    lineupIds: [],
-    weekOf: cfg.weekOf,
-    minVehiclePrice: cfg.minVehiclePrice ?? 0,
-    maxVehiclePrice: cfg.maxVehiclePrice ?? 0,
-    ...(cfg.scraperRef ? { scraperRef: cfg.scraperRef } : {}),
-    ...(cfg.trims ? { trims: cfg.trims } : {}),
-  };
+  const isCatalog = cfg.mode === "catalog";
+  const params: ScrapeJobParams | CatalogJobParams = isCatalog
+    ? {
+        mode: "catalog",
+        brands: cfg.brands ?? [],
+        weekOf: cfg.weekOf,
+        productType: cfg.productType ?? "장기렌트",
+      }
+    : {
+        trimIds: cfg.trimIds,
+        vehicleId: "test",
+        lineupIds: [],
+        weekOf: cfg.weekOf,
+        minVehiclePrice: cfg.minVehiclePrice ?? 0,
+        maxVehiclePrice: cfg.maxVehiclePrice ?? 0,
+        ...(cfg.scraperRef ? { scraperRef: cfg.scraperRef } : {}),
+        ...(cfg.trims ? { trims: cfg.trims } : {}),
+      };
 
   const ctx: AdapterContext = {
     page,
@@ -123,24 +134,46 @@ async function main(): Promise<void> {
     console.log(`== 로그인 (어댑터: ${adapter.code}) ==`);
     await adapter.login(ctx);
 
-    console.log("== 트림 수집 ==");
-    const results: TrimScrapeResult[] = [];
-    for (const t of cfg.trimIds) {
-      const r = await adapter.scrapeTrim(ctx, t);
-      console.log(
-        `  - ${t}: ${r.matchConfidence}, price=${r.vehiclePrice}, baseKeys=${Object.keys(r.baseRates).length}, warn=${r.warnings.length}`
+    if (isCatalog) {
+      if (!adapter.scrapeCatalog) {
+        console.error(`어댑터 ${adapter.code} 는 scrapeCatalog 를 지원하지 않습니다.`);
+      } else {
+        console.log("== 카탈로그 수집 ==");
+        const collected: CatalogTrimEntry[] = [];
+        const opts: CatalogScrapeOptions = {
+          brands: cfg.brands ?? [],
+          isCollected: () => false,
+          onTrimResult: async (e) => {
+            collected.push(e);
+            const cells = Object.entries(e.baseRates).map(([k, v]) => `${k}=${v}`).join(" ");
+            console.log(`  ▷ ${e.modelName} / ${e.trimName} (${e.vehiclePrice.toLocaleString()}원) → ${cells}${e.warnings.length ? ` ⚠${e.warnings.length}` : ""}`);
+          },
+          onModelDone: async () => {},
+          onProgress: () => {},
+        };
+        const res = await adapter.scrapeCatalog(ctx, opts);
+        console.log(`\n== 결과: 수집 ${res.total} / 스킵 ${res.skipped} / 실패 ${res.failed} ==`);
+        if (res.failures?.length) for (const f of res.failures) console.log(`  ✗ ${f.label}: ${f.reason}`);
+      }
+    } else {
+      console.log("== 트림 수집 ==");
+      const results: TrimScrapeResult[] = [];
+      for (const t of cfg.trimIds) {
+        const r = await adapter.scrapeTrim(ctx, t);
+        console.log(
+          `  - ${t}: ${r.matchConfidence}, price=${r.vehiclePrice}, baseKeys=${Object.keys(r.baseRates).length}, warn=${r.warnings.length}`
+        );
+        results.push(r);
+      }
+      const draft = buildDraftFromTrimResults(
+        results,
+        params as ScrapeJobParams,
+        cfg.productType ?? "장기렌트",
+        new Date().toISOString()
       );
-      results.push(r);
+      console.log("\n== 조립된 초안(draft) ==");
+      console.log(JSON.stringify(draft, null, 2));
     }
-
-    const draft = buildDraftFromTrimResults(
-      results,
-      params,
-      cfg.productType ?? "장기렌트",
-      new Date().toISOString()
-    );
-    console.log("\n== 조립된 초안(draft) ==");
-    console.log(JSON.stringify(draft, null, 2));
     console.log("\n브라우저는 열어 둡니다. 화면 확인 후 Enter 로 종료.");
     await prompt("");
   } catch (e) {

@@ -30,6 +30,13 @@ const CONNECTIONS: { match: (name: string) => boolean; conn: CapitalConnection }
     match: (n) => n.includes("JB") || n.includes("전북") || n.includes("우리캐피탈"),
     conn: { adapter: "JBWOORI", loginUrl: "https://emp.wooricap.com/sale/log/mdSaleLog0010.do", requiresHuman: true },
   },
+  {
+    // BNK캐피탈 — 파트너 포털 키보드보안(TouchEn/raon) → 헤드풀 사람 로그인.
+    // 로그인 후 '견적내기'로 견적엔진(aict) 진입까지 사람이 수행하면 token 을 낚아채 API 리플레이.
+    // 어댑터가 카탈로그 수집 전용(scrapeTrim 미지원).
+    match: (n) => n.includes("BNK") || n.includes("비엔케이") || n.includes("부산") || n.includes("경남"),
+    conn: { adapter: "BNK", loginUrl: "https://web.bnkcapital.co.kr/view/prtn/logn/PrtnLogn010M01", requiresHuman: true, catalogOnly: true },
+  },
 ];
 
 /** 캐피탈사명으로 접속 설정을 찾는다. 지원하지 않는 곳이면 null. */

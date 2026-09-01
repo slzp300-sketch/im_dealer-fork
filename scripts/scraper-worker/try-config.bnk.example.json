@@ -1,0 +1,17 @@
+{
+  "_설명": "BNK캐피탈 어댑터 단독 검증용. try-config.json 으로 복사 후 `SCRAPER_TRY_AUTO 없이` (headful) `pnpm scraper:try`. 로그인은 키보드보안 사람 로그인 → 안내대로 파트너 포털 로그인 + '견적내기'로 견적화면(aict)까지 진입 후 Enter. BNK 는 ID/PW 를 코드가 쓰지 않으므로 username/password 는 더미 값이면 됨(사람이 직접 로그인). (BNK-NOTES.md 참고)",
+  "loginUrl": "https://web.bnkcapital.co.kr/view/prtn/logn/PrtnLogn010M01",
+  "username": "human-login",
+  "password": "human-login",
+  "mode": "catalog",
+  "config": {
+    "adapter": "BNK"
+  },
+  "brands": [
+    { "brandCd": "111", "name": "현대", "modelCds": ["11896"] }
+  ],
+  "trimIds": [],
+  "weekOf": "2026-09-07",
+  "productType": "장기렌트",
+  "_검증기준": "현대 디올뉴아반떼(11896) 모던 트림(23,980,000원) → 36_20000=416900, 48_20000=393200, 60_20000=377900 (2만km·만기선택·정비제외·기본색상). 값이 맞으면 어댑터 정상."
+}
