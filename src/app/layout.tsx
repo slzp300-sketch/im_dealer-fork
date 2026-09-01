@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
+import { Analytics } from "@vercel/analytics/next";
 import { PUBLIC_VIEWPORT, ROOT_TOUCH_ACTION } from "@/lib/public-viewport";
 import {
   HOME_TITLE,
@@ -73,7 +74,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className={pretendard.variable} style={rootHtmlStyle}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
