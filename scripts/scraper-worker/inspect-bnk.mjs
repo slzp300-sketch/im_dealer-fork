@@ -16,6 +16,11 @@ import readline from "node:readline";
  *
  * 자격증명 불필요(사람이 직접 로그인). 끝나면 터미널에서 Enter → 결과 저장.
  * 결과: %TEMP%\bnk-recon.json  (Windows) / $TMPDIR/bnk-recon.json
+ *
+ * ⚠️ 브라우저는 절대 자동 종료되지 않는다. Enter 를 눌러도 저장만 하고
+ *    창은 그대로 열린 채 유지되므로, 로그인 세션을 잃지 않고 몇 번이든
+ *    다시 견적을 내고 Enter 로 재캡처할 수 있다. 끝내려면 창을 직접 닫거나
+ *    터미널에서 Ctrl+C 를 누른다.
  */
 
 // 기본값은 BNK 파트너(딜러) 로그인. 일반 홈이 아니라 여기서 로그인·견적을 진행한다.
@@ -45,7 +50,9 @@ function looksLikeApi(url) {
 const captures = [];
 const securityHits = new Set();
 
-function truncate(s, n = 4000) {
+// 응답 본문은 자르지 않는다. aict 견적 API 응답은 base64+zlib 이라 한 글자만
+// 잘려도(특히 … 문자가 끼면) 디코드가 깨진다. 요청 본문만 안전하게 제한한다.
+function truncate(s, n = 20000) {
   if (typeof s !== "string") return s;
   return s.length > n ? s.slice(0, n) + `…(+${s.length - n}자)` : s;
 }
@@ -92,7 +99,8 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
     try {
       const ct = rec.resContentType || "";
       if (/json|text|xml|javascript/i.test(ct)) {
-        rec.resBody = truncate(await res.text());
+        // 절대 자르지 않음: base64+zlib 응답은 온전해야 디코드된다.
+        rec.resBody = await res.text();
       } else {
         rec.resBody = `(비텍스트 ${ct})`;
       }
@@ -113,39 +121,63 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 
   await page.goto(START_URL, { waitUntil: "domcontentloaded" }).catch(() => {});
 
-  await new Promise((resolve) => rl.question("", () => resolve()));
+  // 현재 활성 페이지(탭)를 고른다. 로그인 후 새 탭/팝업으로 넘어가도 따라간다.
+  async function activePage() {
+    try {
+      const pages = await browser.pages();
+      return pages[pages.length - 1] || page;
+    } catch {
+      return page;
+    }
+  }
 
-  // 로그인 폼 셀렉터 후보도 마지막 화면에서 한 번 훑어 남긴다.
-  let inputs = [];
-  try {
-    inputs = await page.evaluate(() =>
-      Array.from(document.querySelectorAll("input,button,a[onclick]")).slice(0, 60).map((el) => ({
-        tag: el.tagName.toLowerCase(),
-        type: el.getAttribute("type"),
-        id: el.id || null,
-        name: el.getAttribute("name"),
-        placeholder: el.getAttribute("placeholder"),
-        text: (el.textContent || "").trim().slice(0, 24) || null,
-      }))
-    );
-  } catch { /* 무시 */ }
+  async function save() {
+    const p = await activePage();
+    // 로그인 폼 셀렉터 후보도 현재 화면에서 훑어 남긴다.
+    let inputs = [];
+    let finalUrl = START_URL;
+    try {
+      finalUrl = p.url();
+      inputs = await p.evaluate(() =>
+        Array.from(document.querySelectorAll("input,button,a[onclick]")).slice(0, 60).map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          type: el.getAttribute("type"),
+          id: el.id || null,
+          name: el.getAttribute("name"),
+          placeholder: el.getAttribute("placeholder"),
+          text: (el.textContent || "").trim().slice(0, 24) || null,
+        }))
+      );
+    } catch { /* 무시 */ }
 
-  const result = {
-    startUrl: START_URL,
-    finalUrl: page.url(),
-    securityHits: [...securityHits],
-    apiCallCount: captures.length,
-    api: captures,
-    lastScreenInputs: inputs,
-  };
-  writeFileSync(OUT, JSON.stringify(result, null, 2), "utf8");
-  console.log(`\n[bnk-recon] 저장 완료: ${OUT}`);
-  console.log(`[bnk-recon] 캡처된 API 호출 ${captures.length}건, 보안 흔적: ${[...securityHits].join(", ") || "없음"}`);
-  console.log(`[bnk-recon] 이 파일을 그대로 공유해 주세요.`);
+    const result = {
+      startUrl: START_URL,
+      finalUrl,
+      securityHits: [...securityHits],
+      apiCallCount: captures.length,
+      api: captures,
+      lastScreenInputs: inputs,
+    };
+    writeFileSync(OUT, JSON.stringify(result, null, 2), "utf8");
+    console.log(`\n[bnk-recon] 저장 완료: ${OUT}`);
+    console.log(`[bnk-recon] 캡처된 API 호출 ${captures.length}건, 보안 흔적: ${[...securityHits].join(", ") || "없음"}`);
+    console.log(`[bnk-recon] 이 파일을 그대로 공유해 주세요.`);
+  }
 
-  rl.close();
-  await browser.close();
-  process.exit(0);
+  // Enter 를 누를 때마다 저장만 하고 브라우저는 계속 열어 둔다.
+  // (로그인 세션을 유지한 채 몇 번이든 재캡처 가능)
+  console.log(`[bnk-recon] 견적을 한 바퀴 낸 뒤 Enter → 저장(브라우저는 유지됩니다).`);
+  console.log(`[bnk-recon] 필요하면 다시 견적내고 또 Enter. 끝내려면 창을 닫거나 Ctrl+C.\n`);
+  rl.on("line", () => {
+    save().catch((e) => console.error("[bnk-recon] 저장 실패:", e));
+  });
+
+  // 브라우저가 사람 손으로 닫히면 그때 종료한다. (자동 종료 없음)
+  browser.on("disconnected", () => {
+    console.log("[bnk-recon] 브라우저가 닫혔습니다. 종료합니다.");
+    try { rl.close(); } catch { /* 무시 */ }
+    process.exit(0);
+  });
 })();
 
 function pickHeaders(h) {
