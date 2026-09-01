@@ -87,6 +87,49 @@ node scripts/scraper-worker/inspect-bnk.mjs
   - **`pmtGrand` = 월납입금(부가세 포함)** = pmtSupply + pmtVat.
   - 실측: 36개월 416,900 / 48개월 393,200 / 60개월 377,900 (2만km, 만기선택형, 정비제외)
 
+## goodsCode 파생 규칙 (bnkfg_codes.goodsCode) ★어댑터 핵심
+
+goodsCode(=상품코드, costData/rentRemain 필수)는 **상품(렌트/리스) × 국산/수입 × 명의(개인/개인사업자/법인) × 거래유형(특판/대리점/선구매/기타)** 로 결정된다.
+`map` 값(LTxxx)이 실제 URL 에 들어가는 goodsCode 다.
+
+| 조건 | 코드 | map(goodsCode) |
+|---|---|---|
+| 렌트 국산 개인 특판 | RDPS | **LT201** |
+| 렌트 국산 개인 대리점 | RDPD | LT203 |
+| 렌트 국산 개인 선구매 | RDPF | LT202 |
+| 렌트 국산 개인사업자 특판 | RDBS | LT204 |
+| 렌트 국산 법인 특판 | RDCS | LT207 |
+| 렌트 수입 개인 특판 | RIPS | **LT210** |
+| 렌트 수입 개인 대리점 | RIPD | LT212 |
+| 렌트 수입 개인 선구매 | RIPF | LT211 |
+| 렌트 수입 개인사업자 특판 | RIBS | LT213 |
+| 렌트 수입 법인 특판 | RICS | LT216 |
+| 리스 국산 운용 당사/이용자 | LDCD/LDUD | ALOD03/ALODC03 |
+| 리스 수입 운용 당사/이용자 | LICD/LIUD | ALO03/ALOC03 |
+
+> 우리 서비스 표준(개인·특판)이면 **국산=LT201, 수입=LT210**. (전체 표는 recon JSON `bnkfg_codes.goodsCode` 참조)
+
+## brandCM 매핑 (bnkfg_codes.brandUse[brandCode].map) — 실측 확인
+
+| 브랜드(코드) | brandCM |
+|---|---|
+| 현대(111) | B5701 |
+| 기아(121) | B5702 |
+| BMW(211) | B5706 |
+| 테슬라(441) | B57B4 |
+
+- modelCM = `DA` + brandCode (예 현대 → DA111), lineupCM = `DA` + modelIdx (예 DA11896), trimCM = `DAR` + trimId + 연식 (예 DAR1057427 + 2027).
+
+## 검증용 실측 견적 (2만km · 만기선택형 · 정비제외) — 어댑터 회귀 테스트 기준
+
+| 브랜드 | 모델 | goodsCode | 차량가 | 36개월 | 48개월 | 60개월 |
+|---|---|---|---|---|---|---|
+| 현대(국산) | 디올뉴아반떼 | LT201 | 23,980,000 | 416,900 | 393,200 | 377,900 |
+| 기아(국산) | 더뉴모닝 | LT201 | 14,210,000 | 324,300 | 300,000 | 289,000 |
+| 테슬라(수입) | New Model 3 | LT210 | 46,990,000 | 987,700 | 884,000 | 819,800 |
+
+- (참고) BMW iX2 는 견적을 끝까지 완성하지 않아 `pmtGrand=null` — 버그 아님, 입력 미완성.
+
 ## 어댑터 등록 체크리스트 (구현 단계)
 
 - [ ] `adapters/bnk.ts` — `SiteAdapter` 구현 (헤드풀 로그인 → 견적 진입 → token 확보 → aict API 리플레이)
