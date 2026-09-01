@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { EventPromoModal } from "./EventPromoModal";
+import { openEventConsult } from "./openEventConsult";
 
 export type EventCar = {
   id: string;
@@ -30,16 +30,22 @@ function StockBadge({ stock }: { stock: string }) {
 
 export function VehicleCard({ car, index = 0 }: { car: EventCar; index?: number }) {
   const featured = Boolean(car.featured);
-  const [modalOpen, setModalOpen] = useState(false);
 
   const subText = featured ? "text-[#9CA3AF]" : "text-[#8A8F98]";
 
   return (
-    <>
-      <motion.button
-        type="button"
-        onClick={() => setModalOpen(true)}
-        aria-label={`${car.brand} ${car.model} ${car.trim} 상담 문의`}
+    <motion.button
+      type="button"
+      onClick={() =>
+        openEventConsult({
+          source: "/event",
+          vehicleName: `${car.brand} ${car.model}`,
+          trimName: car.trim,
+          monthlyPrice: `월 ${car.nowMonthly}만원`,
+          discount: car.discount,
+        })
+      }
+      aria-label={`${car.brand} ${car.model} ${car.trim} 상담 문의`}
       initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
@@ -126,50 +132,44 @@ export function VehicleCard({ car, index = 0 }: { car: EventCar; index?: number 
         </p>
       </div>
     </motion.button>
-
-      <EventPromoModal car={car} open={modalOpen} onClose={() => setModalOpen(false)} />
-    </>
   );
 }
 
 /** 그리드 마지막 셀을 채우는 상담 유도 카드 */
 export function EventConsultCard({ index = 0 }: { index?: number }) {
-  const [modalOpen, setModalOpen] = useState(false);
-
   return (
-    <>
-    <motion.button
-      type="button"
-      onClick={() => setModalOpen(true)}
-      aria-label="찾는 차량이 없을 때 카카오톡 상담하기"
+    <motion.div
+      className="h-full"
       initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
       transition={{ duration: 0.4, delay: (index % 3) * 0.07, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className={[
-        "group flex h-full min-h-[200px] w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-[20px] px-6 py-8 text-center",
-        "ring-2 ring-dashed ring-[#C9CED6] transition-all duration-200 ease-out",
-        "hover:-translate-y-1 hover:bg-white hover:ring-[#0066FF]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066FF] focus-visible:ring-offset-2",
-      ].join(" ")}
     >
-      <p className="text-[18px] font-extrabold leading-snug text-[#111827] md:text-[20px]">
-        찾는 차량이 없으신가요?
-      </p>
-      <p className="text-[14px] leading-relaxed text-[#8A8F98]">
-        다른 차종도 특판가로 준비해 드릴게요.
-        <br />
-        재고와 견적을 바로 안내해 드립니다.
-      </p>
-      <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[#0066FF] px-5 py-2.5 text-[14px] font-bold text-white transition-colors group-hover:bg-[#0052CC]">
-        카카오톡으로 상담하기
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </span>
-    </motion.button>
-
-      <EventPromoModal open={modalOpen} onClose={() => setModalOpen(false)} />
-    </>
+      <Link
+        href="/cars"
+        aria-label="다른 차량 견적 확인"
+        className={[
+          "group flex h-full min-h-[200px] w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-[20px] px-6 py-8 text-center",
+          "ring-2 ring-dashed ring-[#C9CED6] transition-all duration-200 ease-out",
+          "hover:-translate-y-1 hover:bg-white hover:ring-[#0066FF]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066FF] focus-visible:ring-offset-2",
+        ].join(" ")}
+      >
+        <p className="text-[18px] font-extrabold leading-snug text-[#111827] md:text-[20px]">
+          찾는 차량이 없으신가요?
+        </p>
+        <p className="text-[14px] leading-relaxed text-[#8A8F98]">
+          다른 차종도 특판가로 준비해 드릴게요.
+          <br />
+          재고와 견적을 바로 안내해 드립니다.
+        </p>
+        <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[#0066FF] px-5 py-2.5 text-[14px] font-bold text-white transition-colors group-hover:bg-[#0052CC]">
+          다른 차량 견적 확인
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      </Link>
+    </motion.div>
   );
 }
