@@ -5,12 +5,12 @@ import { join } from "node:path";
 import readline from "node:readline";
 
 /**
- * BNK캐피탈 정찰 — 수동 조작 + 내부 API 캡처.
+ * BNK캐피탈 정찰 — 수동 조작 + 내부 API 캡처 (CDP 기반).
  *
- * BNK는 일반 홈(web.bnkcapital.co.kr)에서 로그인하고 견적까지 진행하는 SPA다.
- * 로그인 폼·견적 흐름을 코드로 미리 알 수 없으므로, 브라우저를 열어두고
- * **사람이 직접 로그인 → 견적내기**를 하는 동안 오가는 XHR/fetch(내부 API)를
- * 전부 기록한다. 캡처된 API 엔드포인트·요청/응답이 어댑터 작성의 재료다.
+ * BNK는 파트너 포털(web.bnkcapital.co.kr)에서 로그인하고, 견적내기를 누르면
+ * 견적 엔진(aict.bnkcapital.co.kr)으로 넘어가는 다중 SPA다. 로그인·견적 흐름을
+ * 코드로 미리 알 수 없으므로, 브라우저를 열어두고 **사람이 직접 로그인 → 견적내기**
+ * 를 하는 동안 오가는 XHR/fetch(내부 API)를 전부 기록한다.
  *
  *   node scripts/scraper-worker/inspect-bnk.mjs
  *
@@ -21,6 +21,10 @@ import readline from "node:readline";
  *    창은 그대로 열린 채 유지되므로, 로그인 세션을 잃지 않고 몇 번이든
  *    다시 견적을 내고 Enter 로 재캡처할 수 있다. 끝내려면 창을 직접 닫거나
  *    터미널에서 Ctrl+C 를 누른다.
+ *
+ * ★ CDP(Network) 로 응답 본문을 loadingFinished 시점에 즉시 확보하므로,
+ *   화면 전환(getEncryptTime → aict 이동)·새 탭이 있어도 본문이 유실되지 않는다.
+ *   모든 탭(파트너 포털 + 견적 엔진)에 자동으로 캡처를 건다.
  */
 
 // 기본값은 BNK 파트너(딜러) 로그인. 일반 홈이 아니라 여기서 로그인·견적을 진행한다.
@@ -43,26 +47,120 @@ const IGNORE_RE =
 
 function looksLikeApi(url) {
   if (IGNORE_RE.test(url)) return false;
-  return /\/api\/|\.do(\?|$)|\.act(\?|$)|\.json(\?|$)|\/rest\/|\/svc\/|graphql|\/gw\//i.test(url) ||
-    /web\.bnkcapital\.co\.kr\/.+/i.test(url);
+  return (
+    /\/api\/|\.do(\?|$)|\.act(\?|$)|\.json(\?|$)|\/rest\/|\/svc\/|graphql|\/gw\//i.test(url) ||
+    /web\.bnkcapital\.co\.kr\/.+/i.test(url) ||
+    /aict\.bnkcapital\.co\.kr\/.+/i.test(url)
+  );
 }
 
 const captures = [];
 const securityHits = new Set();
+const aictTokens = new Set();
 
-// 응답 본문은 자르지 않는다. aict 견적 API 응답은 base64+zlib 이라 한 글자만
-// 잘려도(특히 … 문자가 끼면) 디코드가 깨진다. 요청 본문만 안전하게 제한한다.
+// 요청 본문만 안전하게 제한한다. 응답 본문은 절대 자르지 않는다
+// (aict 견적 API 응답은 base64+zlib 이라 한 글자만 잘려도 디코드가 깨진다).
 function truncate(s, n = 20000) {
   if (typeof s !== "string") return s;
   return s.length > n ? s.slice(0, n) + `…(+${s.length - n}자)` : s;
 }
 
+function grabToken(url) {
+  const m = /[?&]token=([^&]+)/.exec(url);
+  if (m && /aict\.bnkcapital/i.test(url)) aictTokens.add(decodeURIComponent(m[1]));
+}
+
+function pickHeaders(h) {
+  const keep = {};
+  if (!h) return keep;
+  for (const [k, v] of Object.entries(h)) {
+    const lk = k.toLowerCase();
+    if (["content-type", "authorization", "x-requested-with", "referer", "cookie"].includes(lk)) {
+      // 쿠키는 존재 여부만 표시(민감정보 회피).
+      keep[lk] = lk === "cookie" ? "(present)" : v;
+    }
+  }
+  return keep;
+}
+
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+/**
+ * 하나의 페이지(탭)에 CDP Network 캡처를 건다. requestId 로 요청·응답·본문을 합친다.
+ */
+async function attachCapture(target) {
+  if (target.type() !== "page") return;
+  let client;
+  try {
+    client = await target.createCDPSession();
+  } catch {
+    return;
+  }
+  const pending = new Map(); // requestId -> capture rec
+
+  try {
+    await client.send("Network.enable");
+  } catch { /* 무시 */ }
+
+  client.on("Network.requestWillBeSent", (e) => {
+    const url = e.request?.url || "";
+    grabToken(url);
+    if (!looksLikeApi(url)) return;
+    const rec = {
+      t: new Date().toISOString(),
+      method: e.request.method,
+      url,
+      reqBody: truncate(e.request.postData || null),
+      reqHeaders: pickHeaders(e.request.headers),
+      status: null,
+      resBody: null,
+      resContentType: null,
+    };
+    pending.set(e.requestId, rec);
+    captures.push(rec);
+  });
+
+  client.on("Network.responseReceived", (e) => {
+    const rec = pending.get(e.requestId);
+    if (!rec) return;
+    rec.status = e.response?.status ?? null;
+    rec.resContentType = e.response?.headers?.["content-type"] || e.response?.mimeType || null;
+  });
+
+  client.on("Network.loadingFinished", async (e) => {
+    const rec = pending.get(e.requestId);
+    if (!rec) return;
+    try {
+      const { body, base64Encoded } = await client.send("Network.getResponseBody", {
+        requestId: e.requestId,
+      });
+      const ct = rec.resContentType || "";
+      if (base64Encoded && !/json|text|xml|javascript/i.test(ct)) {
+        rec.resBody = `(비텍스트 ${ct})`;
+      } else {
+        rec.resBody = base64Encoded ? Buffer.from(body, "base64").toString("utf8") : body;
+      }
+    } catch {
+      rec.resBody = "(응답 읽기 실패)";
+    } finally {
+      pending.delete(e.requestId);
+    }
+  });
+
+  client.on("Network.loadingFailed", (e) => {
+    const rec = pending.get(e.requestId);
+    if (rec) {
+      rec.status = rec.status ?? "failed";
+      rec.resBody = rec.resBody ?? `(로딩 실패: ${e.errorText || ""})`;
+      pending.delete(e.requestId);
+    }
+  });
+}
 
 (async () => {
   console.log(`[bnk-recon] 브라우저를 엽니다: ${START_URL}`);
   console.log(`[bnk-recon] 창에서 직접 로그인하고 견적을 한 번 끝까지 내보세요.`);
-  console.log(`[bnk-recon] 다 하시면 이 터미널로 돌아와 Enter 를 누르면 결과가 저장됩니다.\n`);
+  console.log(`[bnk-recon] (다른 브랜드·리스/렌트로 여러 번 내면 캡처가 더 풍부해집니다.)\n`);
 
   const browser = await puppeteer.launch({
     headless: false,
@@ -70,44 +168,12 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
     defaultViewport: null,
     args: ["--start-maximized", "--disable-blink-features=AutomationControlled"],
   });
+
+  // 새로 열리는 탭(견적 엔진 팝업 포함)에도 자동으로 캡처를 건다.
+  browser.on("targetcreated", (t) => { attachCapture(t).catch(() => {}); });
+  for (const t of browser.targets()) await attachCapture(t).catch(() => {});
+
   const page = (await browser.pages())[0] || (await browser.newPage());
-
-  // 응답을 URL 로 매칭해 요청과 합친다.
-  page.on("request", (req) => {
-    const url = req.url();
-    const type = req.resourceType();
-    if (!(type === "xhr" || type === "fetch")) return;
-    if (!looksLikeApi(url)) return;
-    captures.push({
-      t: new Date().toISOString(),
-      method: req.method(),
-      url,
-      reqBody: truncate(req.postData() || null),
-      reqHeaders: pickHeaders(req.headers()),
-      status: null,
-      resBody: null,
-      resContentType: null,
-    });
-  });
-
-  page.on("response", async (res) => {
-    const url = res.url();
-    const rec = [...captures].reverse().find((c) => c.url === url && c.status === null);
-    if (!rec) return;
-    rec.status = res.status();
-    rec.resContentType = res.headers()["content-type"] || null;
-    try {
-      const ct = rec.resContentType || "";
-      if (/json|text|xml|javascript/i.test(ct)) {
-        // 절대 자르지 않음: base64+zlib 응답은 온전해야 디코드된다.
-        rec.resBody = await res.text();
-      } else {
-        rec.resBody = `(비텍스트 ${ct})`;
-      }
-    } catch {
-      rec.resBody = "(응답 읽기 실패)";
-    }
-  });
 
   // 보안 솔루션 흔적을 프레임 문서에서 훑는다.
   page.on("framenavigated", async () => {
@@ -133,7 +199,6 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 
   async function save() {
     const p = await activePage();
-    // 로그인 폼 셀렉터 후보도 현재 화면에서 훑어 남긴다.
     let inputs = [];
     let finalUrl = START_URL;
     try {
@@ -154,19 +219,20 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
       startUrl: START_URL,
       finalUrl,
       securityHits: [...securityHits],
+      aictTokens: [...aictTokens],
       apiCallCount: captures.length,
       api: captures,
       lastScreenInputs: inputs,
     };
     writeFileSync(OUT, JSON.stringify(result, null, 2), "utf8");
     console.log(`\n[bnk-recon] 저장 완료: ${OUT}`);
-    console.log(`[bnk-recon] 캡처된 API 호출 ${captures.length}건, 보안 흔적: ${[...securityHits].join(", ") || "없음"}`);
+    console.log(`[bnk-recon] 캡처된 API 호출 ${captures.length}건, token: ${[...aictTokens].join(", ") || "없음"}`);
+    console.log(`[bnk-recon] 보안 흔적: ${[...securityHits].join(", ") || "없음"}`);
     console.log(`[bnk-recon] 이 파일을 그대로 공유해 주세요.`);
   }
 
   // Enter 를 누를 때마다 저장만 하고 브라우저는 계속 열어 둔다.
-  // (로그인 세션을 유지한 채 몇 번이든 재캡처 가능)
-  console.log(`[bnk-recon] 견적을 한 바퀴 낸 뒤 Enter → 저장(브라우저는 유지됩니다).`);
+  console.log(`[bnk-recon] 견적을 낸 뒤 Enter → 저장(브라우저는 유지됩니다).`);
   console.log(`[bnk-recon] 필요하면 다시 견적내고 또 Enter. 끝내려면 창을 닫거나 Ctrl+C.\n`);
   rl.on("line", () => {
     save().catch((e) => console.error("[bnk-recon] 저장 실패:", e));
@@ -179,11 +245,3 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
     process.exit(0);
   });
 })();
-
-function pickHeaders(h) {
-  const keep = {};
-  for (const k of ["content-type", "authorization", "x-requested-with", "referer"]) {
-    if (h[k]) keep[k] = h[k];
-  }
-  return keep;
-}
