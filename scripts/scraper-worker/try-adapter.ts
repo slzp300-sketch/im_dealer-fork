@@ -146,7 +146,12 @@ async function main(): Promise<void> {
           onTrimResult: async (e) => {
             collected.push(e);
             const cells = Object.entries(e.baseRates).map(([k, v]) => `${k}=${v}`).join(" ");
+            const dp = [
+              e.depositRate36_10000 ? `보증금10%(36/1만)=${e.depositRate36_10000}` : "",
+              e.prepayRate36_10000 ? `선납금10%(36/1만)=${e.prepayRate36_10000}` : "",
+            ].filter(Boolean).join(" ");
             console.log(`  ▷ ${e.modelName} / ${e.trimName} (${e.vehiclePrice.toLocaleString()}원) → ${cells}${e.warnings.length ? ` ⚠${e.warnings.length}` : ""}`);
+            if (dp) console.log(`      ${dp}`);
           },
           onModelDone: async () => {},
           onProgress: () => {},
