@@ -1,23 +1,19 @@
 # BNK캐피탈 스크래핑 — 역설계 노트 (정찰 진행 중)
 
-> 대상: `https://web.bnkcapital.co.kr/` (2026-08-31 착수)
+> 대상(파트너 로그인): `https://web.bnkcapital.co.kr/view/prtn/logn/PrtnLogn010M01` (2026-08-31 착수)
+> ⚠️ `web.bnkcapital.co.kr/` 루트는 일반 고객 홈(로그인 폼 없음). 딜러 견적은 위 **파트너(prtn) 로그인** 경로에서 로그인·진행한다.
 > ORIX-NOTES.md 와 같은 구조로, 정찰 결과를 이 문서에 채워 어댑터 작성·유지보수의 근거로 삼는다.
-> 정찰 도구: `inspect-login.mjs` / `inspect-postlogin.mjs` / `inspect-quote.mjs` /
-> `inspect-flow.mjs` / `inspect-api.mjs` (자격증명은 워커 PC `.env` 의
-> `SCRAPER_TEST_USER`/`SCRAPER_TEST_PASS`).
+> BNK 는 로그인·견적이 한 SPA 안에서 이뤄져 ORIX용 inspect 스크립트(하드코딩)를 쓸 수 없다.
+> 대신 `inspect-bnk.mjs`(수동 로그인+견적 중 내부 API 캡처)로 정찰한다.
 
 ## 정찰 절차 (워커 PC에서 실행)
 
 ```bash
-# 1) 로그인 페이지 관찰 — 자격증명 불필요. 셀렉터·키보드보안 흔적 덤프
-node scripts/scraper-worker/inspect-login.mjs https://web.bnkcapital.co.kr/
-
-# 2) (로그인 성공 후) 메뉴·프레임 구조
-node scripts/scraper-worker/inspect-postlogin.mjs
-
-# 3) 견적 화면 흐름·내부 API 호출 관찰
-node scripts/scraper-worker/inspect-flow.mjs
-node scripts/scraper-worker/inspect-api.mjs
+# 브라우저가 파트너 로그인으로 뜬다(기본 URL 고정). 직접 로그인 → 견적 한 바퀴 →
+# cmd 로 돌아와 Enter → %TEMP%\bnk-recon.json 에 내부 API 호출이 저장된다.
+node scripts/scraper-worker/inspect-bnk.mjs
+# (다른 URL 로 보려면 인자로 덮어쓴다)
+# node scripts/scraper-worker/inspect-bnk.mjs https://web.bnkcapital.co.kr/view/prtn/logn/PrtnLogn010M01
 ```
 
 ## 로그인 — (정찰 결과 기입)

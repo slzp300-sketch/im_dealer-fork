@@ -18,7 +18,9 @@ import readline from "node:readline";
  * 결과: %TEMP%\bnk-recon.json  (Windows) / $TMPDIR/bnk-recon.json
  */
 
-const START_URL = process.argv[2] || "https://web.bnkcapital.co.kr/";
+// 기본값은 BNK 파트너(딜러) 로그인. 일반 홈이 아니라 여기서 로그인·견적을 진행한다.
+const START_URL =
+  process.argv[2] || "https://web.bnkcapital.co.kr/view/prtn/logn/PrtnLogn010M01";
 const EXE =
   process.env.PUPPETEER_EXECUTABLE_PATH ||
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
