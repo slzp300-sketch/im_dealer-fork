@@ -179,14 +179,17 @@ async function main(): Promise<void> {
       console.log("\n== 조립된 초안(draft) ==");
       console.log(JSON.stringify(draft, null, 2));
     }
-    console.log("\n브라우저는 열어 둡니다. 화면 확인 후 Enter 로 종료.");
-    await prompt("");
   } catch (e) {
     console.error("\n[실패]", (e as Error).message);
-    console.log("브라우저는 디버깅을 위해 열어 둡니다. Enter 로 종료.");
-    await prompt("");
   } finally {
-    await browser.close().catch(() => null);
+    if (AUTO) {
+      await browser.close().catch(() => null);
+    } else {
+      // 대화형: 브라우저를 절대 자동으로 닫지 않는다. 로그인 세션을 유지한 채
+      // 화면에서 값을 대조하거나 다시 견적을 내볼 수 있다. 끝내려면 이 창에서 Ctrl+C.
+      console.log("\n브라우저를 열어 둡니다 — 자동 종료하지 않습니다. 검증이 끝나면 이 창에서 Ctrl+C 로 종료하세요.");
+      await new Promise(() => {});
+    }
   }
 }
 
