@@ -84,6 +84,54 @@ export async function fetchChannelTalkChatUserId(
   }
 }
 
+/**
+ * 유저챗에 봇 메시지를 넣는다. 견적서 적재 직후 "보내드렸어요" 안내를 그 상담방에만
+ * 남기는 용도다 — 워크플로우 인사말은 모든 상담에 나가므로 견적서 문구를 거기에
+ * 섞을 수 없다(견적서와 무관한 일반 문의도 같은 인사말을 받는다).
+ * 실패해도 견적서 발송 자체에는 영향이 없으므로 경고만 남기고 false 를 돌려준다.
+ */
+export async function sendChannelTalkChatMessage(
+  userChatId: string,
+  text: string
+): Promise<boolean> {
+  const creds = credentials();
+  if (!creds) {
+    console.warn("[channel-talk api] 액세스 키 미설정 — 상담방 안내 메시지를 건너뜀");
+    return false;
+  }
+
+  // botName 이 없으면 채널톡이 기본 봇 이름으로 남긴다. 콘솔에 만든 봇 이름을
+  // 쓰고 싶으면 env 로 지정한다.
+  const botName = process.env.CHANNEL_TALK_BOT_NAME?.trim();
+  const query = botName ? `?botName=${encodeURIComponent(botName)}` : "";
+
+  try {
+    const response = await fetch(
+      `${API_HOST}/open/v5/user-chats/${encodeURIComponent(userChatId)}/messages${query}`,
+      {
+        method: "POST",
+        headers: {
+          "x-access-key": creds.key,
+          "x-access-secret": creds.secret,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ blocks: [{ type: "text", value: text }] }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      }
+    );
+    if (!response.ok) {
+      console.warn(`[channel-talk api] 상담방 메시지 HTTP ${response.status}`);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn(
+      `[channel-talk api] 상담방 메시지 실패: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return false;
+  }
+}
+
 export async function fetchChannelTalkUserPhone(
   personId: string
 ): Promise<ChannelTalkUserLookup> {

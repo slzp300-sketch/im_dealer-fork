@@ -24,7 +24,17 @@ import {
 import {
   fetchChannelTalkChatUserId,
   fetchChannelTalkUserPhone,
+  sendChannelTalkChatMessage,
 } from "@/lib/channel-talk-open-api";
+
+/**
+ * 견적서 적재 직후 그 상담방에만 남기는 안내. 워크플로우 인사말은 견적서와 무관한
+ * 일반 문의에도 나가므로 이 문구를 거기에 둘 수 없다 — 발송이 실제로 일어난
+ * 상담방에서만 서버가 직접 말한다. 전송 실패는 안내가 안 보일 뿐이라 발송 결과에
+ * 영향을 주지 않는다.
+ */
+const QUOTE_SENT_NOTICE =
+  "요청하신 견적서를 카카오톡 알림톡으로 보내드렸어요 📄\n추가로 요청하실 사항이 있으신가요? 이 채팅에 남겨주시면 상담사가 도와드립니다.";
 
 export const runtime = "nodejs";
 
@@ -150,6 +160,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, skipped: "other_type" });
   }
 
+  // 안내 메시지를 남길 상담방. 유저챗이 아닌 이벤트(그룹 대화 등)면 null 이라
+  // 안내 없이 발송만 된다.
+  const userChatId = extractUserChatId(body);
+
   try {
     if (requestCode) {
       const result = await dispatchQuoteDeliveryByRequestCode(requestCode);
@@ -160,6 +174,7 @@ export async function POST(request: NextRequest) {
       // 요청번호와 deliveryId 는 로그·응답에 실지 않는다. 견적서 링크가 유출되면
       // 아무나 열어볼 수 있으므로, 어드민 발송 이력으로 대신 추적한다.
       console.log(`[channel-talk webhook] 견적서 적재`);
+      if (userChatId) await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
       return NextResponse.json({ ok: true });
     }
 
@@ -174,7 +189,6 @@ export async function POST(request: NextRequest) {
     // 견적서는 어차피 "그 방 고객 본인의" 전화번호로만 매칭되므로, 봇 이벤트로
     // 남의 견적서가 나갈 여지는 없다.
     const personId = extractCustomerPersonId(body);
-    const userChatId = personId ? null : extractUserChatId(body);
     if (!personId && !userChatId) {
       return NextResponse.json({ ok: true, skipped: "no_request_code" });
     }
@@ -213,6 +227,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: result.reason });
     }
     console.log(`[channel-talk webhook] 견적서 적재 (전화번호 매칭)`);
+    if (userChatId) await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[channel-talk webhook]", error);

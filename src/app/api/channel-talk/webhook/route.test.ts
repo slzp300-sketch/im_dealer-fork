@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   hasAwaiting: vi.fn(),
   fetchPhone: vi.fn(),
   fetchChatUserId: vi.fn(),
+  sendChatMessage: vi.fn(),
   checkRateLimit: vi.fn(async (): Promise<NextResponse | null> => null),
 }));
 
@@ -19,6 +20,7 @@ vi.mock("@/lib/quote-delivery/dispatch", () => ({
 vi.mock("@/lib/channel-talk-open-api", () => ({
   fetchChannelTalkUserPhone: mocks.fetchPhone,
   fetchChannelTalkChatUserId: mocks.fetchChatUserId,
+  sendChannelTalkChatMessage: mocks.sendChatMessage,
 }));
 
 // 로컬·CI 에는 Upstash 가 없어 실제 limiter 는 전부 null 이다. 호출 여부와
@@ -70,6 +72,7 @@ beforeEach(() => {
   mocks.dispatchByPhone.mockResolvedValue({ ok: true, deliveryId: "delivery-1" });
   mocks.fetchPhone.mockResolvedValue({ ok: true, phone: "+821012345678", profileKeys: [] });
   mocks.fetchChatUserId.mockResolvedValue("chat-owner-1");
+  mocks.sendChatMessage.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -306,6 +309,58 @@ describe("POST /api/channel-talk/webhook", () => {
 
     expect(mocks.fetchChatUserId).not.toHaveBeenCalled();
     expect(mocks.fetchPhone).toHaveBeenCalledWith("person-1");
+  });
+
+  // 워크플로우 인사말은 모든 상담에 나가므로 "보내드렸어요" 문구를 거기에 둘 수
+  // 없다 — 발송이 실제로 일어난 상담방에만 서버가 안내를 남긴다.
+  it("적재에 성공하면 그 상담방에 안내 메시지를 남긴다", async () => {
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(res.status).toBe(200);
+    expect(mocks.sendChatMessage).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("견적서")
+    );
+  });
+
+  it("요청번호 발송에 성공해도 상담방 안내를 남긴다", async () => {
+    const body = {
+      type: "Message",
+      entity: { plainText: "요청번호 AB23CD", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.dispatch).toHaveBeenCalledWith("AB23CD");
+    expect(mocks.sendChatMessage).toHaveBeenCalledWith(
+      "chat-1",
+      expect.stringContaining("견적서")
+    );
+  });
+
+  it("발송이 일어나지 않으면 안내 메시지도 남기지 않는다", async () => {
+    mocks.dispatchByPhone.mockResolvedValue({ ok: false, reason: "not_found" });
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.sendChatMessage).not.toHaveBeenCalled();
+  });
+
+  it("상담방 id 가 없으면 안내 없이 발송만 한다", async () => {
+    const res = await POST(webhookRequest(phoneMatchBody()));
+
+    expect(res.status).toBe(200);
+    expect(mocks.dispatchByPhone).toHaveBeenCalled();
+    expect(mocks.sendChatMessage).not.toHaveBeenCalled();
   });
 
   // 카카오 경유 고객은 프로필에 번호가 없을 수 있다 — 이 설계의 판정 지점이라
