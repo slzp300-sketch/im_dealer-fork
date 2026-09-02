@@ -78,7 +78,11 @@ function pickHeaders(h) {
   return keep;
 }
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+// 터미널(TTY)에서 직접 실행할 때만 Enter 종료를 받는다. 백그라운드로 띄우면
+// stdin 이 없어 readline 이 즉시 닫히므로 만들지 않고, "창 닫기"로만 종료한다.
+const rl = process.stdin.isTTY
+  ? readline.createInterface({ input: process.stdin, output: process.stdout })
+  : null;
 
 (async () => {
   console.log(`[capital-recon] 브라우저를 엽니다: ${START_URL}`);
@@ -140,39 +144,74 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 
   await page.goto(START_URL, { waitUntil: "domcontentloaded" }).catch(() => {});
 
-  await new Promise((resolve) => rl.question("", () => resolve()));
+  // 종료 경로는 두 가지: (A) 터미널에서 Enter, (B) 브라우저 창을 닫음.
+  // 클로드가 백그라운드로 띄운 경우엔 터미널 stdin 을 못 쓰므로, 견적을 끝낸 뒤
+  // 창을 닫기만 하면 자동 저장되도록 disconnect 도 종료 트리거로 둔다.
+  let finished = false;
+  async function finish(reason) {
+    if (finished) return;
+    finished = true;
 
-  // 마지막 화면의 폼 셀렉터 후보도 한 번 훑어 남긴다.
-  let inputs = [];
-  try {
-    inputs = await page.evaluate(() =>
-      Array.from(document.querySelectorAll("input,select,button,a[onclick]")).slice(0, 80).map((el) => ({
-        tag: el.tagName.toLowerCase(),
-        type: el.getAttribute("type"),
-        id: el.id || null,
-        name: el.getAttribute("name"),
-        placeholder: el.getAttribute("placeholder"),
-        onclick: (el.getAttribute("onclick") || "").slice(0, 60) || null,
-        text: (el.textContent || "").trim().slice(0, 24) || null,
-      }))
-    );
-  } catch { /* 무시 */ }
+    // 마지막 화면 폼 셀렉터 후보 — 창이 이미 닫혔으면 건너뛴다.
+    let inputs = [];
+    let finalUrl = START_URL;
+    try {
+      finalUrl = page.url();
+      inputs = await page.evaluate(() =>
+        Array.from(document.querySelectorAll("input,select,button,a[onclick]")).slice(0, 80).map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          type: el.getAttribute("type"),
+          id: el.id || null,
+          name: el.getAttribute("name"),
+          placeholder: el.getAttribute("placeholder"),
+          onclick: (el.getAttribute("onclick") || "").slice(0, 60) || null,
+          text: (el.textContent || "").trim().slice(0, 24) || null,
+        }))
+      );
+    } catch { /* 창 닫힘 등 — 무시 */ }
 
-  const result = {
-    startUrl: START_URL,
-    finalUrl: page.url(),
-    baseHost,
-    securityHits: [...securityHits],
-    apiCallCount: captures.length,
-    api: captures,
-    lastScreenInputs: inputs,
-  };
-  writeFileSync(OUT, JSON.stringify(result, null, 2), "utf8");
-  console.log(`\n[capital-recon] 저장 완료: ${OUT}`);
-  console.log(`[capital-recon] 캡처된 API 호출 ${captures.length}건, 보안 흔적: ${[...securityHits].join(", ") || "없음"}`);
-  console.log(`[capital-recon] 이 파일 경로를 클로드에게 알려주세요.`);
+    const result = {
+      startUrl: START_URL,
+      finalUrl,
+      baseHost,
+      endedBy: reason,
+      securityHits: [...securityHits],
+      apiCallCount: captures.length,
+      api: captures,
+      lastScreenInputs: inputs,
+    };
+    writeFileSync(OUT, JSON.stringify(result, null, 2), "utf8");
+    console.log(`\n[capital-recon] 저장 완료(${reason}): ${OUT}`);
+    console.log(`[capital-recon] 캡처된 API 호출 ${captures.length}건, 보안 흔적: ${[...securityHits].join(", ") || "없음"}`);
 
-  rl.close();
-  await browser.close();
-  process.exit(0);
+    rl?.close();
+    try { await browser.close(); } catch { /* 이미 닫힘 */ }
+    process.exit(0);
+  }
+
+  // 브라우저를 닫지 않아도 최신 캡처를 확인할 수 있도록 주기적으로 저장한다.
+  // (사용자는 창을 열어둔 채 견적을 여러 번 내고, 그 사이 언제든 파일을 읽을 수 있다.)
+  function snapshot(reason) {
+    const result = {
+      startUrl: START_URL,
+      finalUrl: (() => { try { return page.url(); } catch { return START_URL; } })(),
+      baseHost,
+      endedBy: reason,
+      updatedAt: new Date().toISOString(),
+      securityHits: [...securityHits],
+      apiCallCount: captures.length,
+      api: captures,
+    };
+    try { writeFileSync(OUT, JSON.stringify(result, null, 2), "utf8"); } catch { /* 무시 */ }
+  }
+  const saveTimer = setInterval(() => snapshot("live"), 4000);
+
+  browser.on("disconnected", () => { clearInterval(saveTimer); void finish("browser-closed"); });
+  if (rl) {
+    rl.question("", () => { clearInterval(saveTimer); void finish("enter"); });
+  } else {
+    console.log(`[capital-recon] (백그라운드 모드) 4초마다 자동 저장합니다: ${OUT}`);
+    console.log(`[capital-recon] 창을 닫지 않아도 됩니다 — 견적을 낸 뒤 클로드에게 "확인해줘"라고 하세요.`);
+    console.log(`[capital-recon] 다 끝나면 창을 닫으면 최종 저장 후 종료됩니다.`);
+  }
 })();
