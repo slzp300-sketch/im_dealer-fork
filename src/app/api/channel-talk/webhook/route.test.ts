@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   dispatchByPhone: vi.fn(),
   hasAwaiting: vi.fn(),
   fetchPhone: vi.fn(),
+  fetchChatUserId: vi.fn(),
   checkRateLimit: vi.fn(async (): Promise<NextResponse | null> => null),
 }));
 
@@ -17,6 +18,7 @@ vi.mock("@/lib/quote-delivery/dispatch", () => ({
 
 vi.mock("@/lib/channel-talk-open-api", () => ({
   fetchChannelTalkUserPhone: mocks.fetchPhone,
+  fetchChannelTalkChatUserId: mocks.fetchChatUserId,
 }));
 
 // 로컬·CI 에는 Upstash 가 없어 실제 limiter 는 전부 null 이다. 호출 여부와
@@ -26,7 +28,12 @@ vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: mocks.checkRateLimit,
 }));
 
-import { extractCustomerPersonId, extractMessageText, POST } from "./route";
+import {
+  extractCustomerPersonId,
+  extractMessageText,
+  extractUserChatId,
+  POST,
+} from "./route";
 import { strictRateLimit } from "@/lib/rate-limit";
 
 const TOKEN = "webhook-token";
@@ -62,6 +69,7 @@ beforeEach(() => {
   mocks.dispatch.mockResolvedValue({ ok: true, deliveryId: "delivery-1" });
   mocks.dispatchByPhone.mockResolvedValue({ ok: true, deliveryId: "delivery-1" });
   mocks.fetchPhone.mockResolvedValue({ ok: true, phone: "+821012345678", profileKeys: [] });
+  mocks.fetchChatUserId.mockResolvedValue("chat-owner-1");
 });
 
 afterEach(() => {
@@ -237,6 +245,69 @@ describe("POST /api/channel-talk/webhook", () => {
     expect(mocks.dispatchByPhone).not.toHaveBeenCalled();
   });
 
+  // 상담이 이미 열려 있는 고객이 재진입하면 진입 이벤트가 없어 워크플로우 인사말이
+  // 그 상담의 첫 웹훅이 된다. 이때는 유저챗 주인을 조회해 같은 매칭을 돌린다 —
+  // 안 그러면 고객이 뭔가 입력할 때까지 견적서가 밀린다.
+  it("봇 메시지는 유저챗 주인을 조회해 매칭 발송한다", async () => {
+    const body = {
+      type: "message",
+      entity: {
+        plainText: "무엇을 도와드릴까요",
+        personType: "bot",
+        personId: "bot-1",
+        chatType: "userChat",
+        chatId: "chat-1",
+      },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(res.status).toBe(200);
+    expect(mocks.fetchChatUserId).toHaveBeenCalledWith("chat-1");
+    expect(mocks.fetchPhone).toHaveBeenCalledWith("chat-owner-1");
+    expect(mocks.dispatchByPhone).toHaveBeenCalledWith("+821012345678");
+  });
+
+  it("유저챗 주인 조회가 실패하면 no_chat_user 로 지나간다", async () => {
+    mocks.fetchChatUserId.mockResolvedValue(null);
+    const body = {
+      type: "message",
+      entity: { personType: "bot", chatType: "userChat", chatId: "chat-1" },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(await res.json()).toMatchObject({ skipped: "no_chat_user" });
+    expect(mocks.fetchPhone).not.toHaveBeenCalled();
+  });
+
+  // Open API 호출을 아끼는 가드는 유저챗 주인 조회에도 똑같이 걸린다.
+  it("대기 건이 없으면 유저챗 주인 조회도 하지 않는다", async () => {
+    mocks.hasAwaiting.mockResolvedValue(false);
+    const body = {
+      type: "message",
+      entity: { personType: "bot", chatType: "userChat", chatId: "chat-1" },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(await res.json()).toMatchObject({ skipped: "no_awaiting" });
+    expect(mocks.fetchChatUserId).not.toHaveBeenCalled();
+  });
+
+  // 고객 personId 가 있으면 유저챗 조회는 불필요한 API 호출이다.
+  it("고객 메시지는 유저챗 주인 조회 없이 personId 로 간다", async () => {
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.fetchChatUserId).not.toHaveBeenCalled();
+    expect(mocks.fetchPhone).toHaveBeenCalledWith("person-1");
+  });
+
   // 카카오 경유 고객은 프로필에 번호가 없을 수 있다 — 이 설계의 판정 지점이라
   // skipped 사유를 구분해 남긴다.
   it("프로필에 전화번호가 없으면 no_phone 으로 지나간다", async () => {
@@ -313,6 +384,24 @@ describe("extractMessageText", () => {
   it("entity 가 없으면 빈 문자열", () => {
     expect(extractMessageText({ type: "Message" })).toBe("");
     expect(extractMessageText(null)).toBe("");
+  });
+});
+
+describe("extractUserChatId", () => {
+  it("유저챗 메시지의 chatId 를 돌려준다", () => {
+    expect(
+      extractUserChatId({ entity: { chatType: "userChat", chatId: "chat-1" } })
+    ).toBe("chat-1");
+    expect(extractUserChatId({ entity: { chatId: "chat-1" } })).toBe("chat-1");
+  });
+
+  // 그룹 대화 등 유저챗이 아닌 방의 봇 메시지로 견적서를 보내면 안 된다.
+  it("유저챗이 아닌 방은 돌려주지 않는다", () => {
+    expect(
+      extractUserChatId({ entity: { chatType: "group", chatId: "group-1" } })
+    ).toBeNull();
+    expect(extractUserChatId({ entity: {} })).toBeNull();
+    expect(extractUserChatId(null)).toBeNull();
   });
 });
 

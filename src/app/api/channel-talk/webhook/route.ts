@@ -21,7 +21,10 @@ import {
   dispatchQuoteDeliveryByRequestCode,
   hasAwaitingQuoteDelivery,
 } from "@/lib/quote-delivery/dispatch";
-import { fetchChannelTalkUserPhone } from "@/lib/channel-talk-open-api";
+import {
+  fetchChannelTalkChatUserId,
+  fetchChannelTalkUserPhone,
+} from "@/lib/channel-talk-open-api";
 
 export const runtime = "nodejs";
 
@@ -164,8 +167,15 @@ export async function POST(request: NextRequest) {
     // 상담 정보를 채널톡에 넘기지 않아(채널톡 공식 확인) 요청번호가 자동으로 실려
     // 올 수 없다 — 상담을 연 고객이 "누구인지"(personId → 프로필 전화번호)로 대기
     // 중인 견적서를 찾는다. 일반 문의는 대기 건이 없어 그대로 지나간다.
+    //
+    // 워크플로우·봇 메시지에는 고객 personId 가 없다. 그런데 상담이 이미 열려 있는
+    // 고객이 재진입하면 진입 이벤트가 따로 없어 봇 인사말이 그 상담의 첫 웹훅이
+    // 된다 — 이때는 메시지가 속한 유저챗의 주인을 조회해 같은 매칭을 돌린다.
+    // 견적서는 어차피 "그 방 고객 본인의" 전화번호로만 매칭되므로, 봇 이벤트로
+    // 남의 견적서가 나갈 여지는 없다.
     const personId = extractCustomerPersonId(body);
-    if (!personId) {
+    const userChatId = personId ? null : extractUserChatId(body);
+    if (!personId && !userChatId) {
       return NextResponse.json({ ok: true, skipped: "no_request_code" });
     }
 
@@ -178,11 +188,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "no_awaiting" });
     }
 
-    const lookup = await fetchChannelTalkUserPhone(personId);
+    const customerId =
+      personId ?? (userChatId ? await fetchChannelTalkChatUserId(userChatId) : null);
+    if (!customerId) {
+      return NextResponse.json({ ok: true, skipped: "no_chat_user" });
+    }
+
+    const lookup = await fetchChannelTalkUserPhone(customerId);
     // 관측용 — 카카오 경유 고객의 프로필에 번호가 실리는지가 이 설계의 판정 기준이다.
     // 번호 값 자체는 남기지 않는다.
     console.log(
-      `[channel-talk webhook] profile ok=${lookup.ok} phone=${lookup.phone ? "present" : "absent"} profileKeys=${lookup.profileKeys.join(",")}`
+      `[channel-talk webhook] profile ok=${lookup.ok} via=${personId ? "person" : "chat"} phone=${lookup.phone ? "present" : "absent"} profileKeys=${lookup.profileKeys.join(",")}`
     );
     if (!lookup.phone) {
       return NextResponse.json({ ok: true, skipped: "no_phone" });
@@ -203,6 +219,21 @@ export async function POST(request: NextRequest) {
     // 재시도 폭주를 막으려 200 으로 닫는다. 누락 건은 어드민에서 수동 발송한다.
     return NextResponse.json({ ok: true, skipped: "error" });
   }
+}
+
+/**
+ * 봇·워크플로우 메시지가 속한 유저챗 id. 고객 personId 가 없을 때 상담방 주인을
+ * 조회하는 데 쓴다. 그룹 대화 등 유저챗이 아닌 방(chatType 이 다름)은 제외한다.
+ */
+export function extractUserChatId(body: unknown): string | null {
+  const entity = (body as { entity?: unknown } | null)?.entity;
+  if (!entity || typeof entity !== "object") return null;
+  const record = entity as Record<string, unknown>;
+
+  if (typeof record.chatType === "string" && !/^userchat$/i.test(record.chatType)) {
+    return null;
+  }
+  return typeof record.chatId === "string" && record.chatId ? record.chatId : null;
 }
 
 /**

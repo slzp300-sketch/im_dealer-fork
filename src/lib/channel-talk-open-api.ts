@@ -39,6 +39,51 @@ export interface ChannelTalkUserLookup {
   profileKeys: string[];
 }
 
+/**
+ * 유저챗의 고객 userId 조회. 워크플로우·봇 메시지 이벤트에는 고객 personId 가
+ * 없어서(발신자가 봇이다), 그 상담방의 주인이 누구인지를 이걸로 알아낸다.
+ * 상담이 이미 열려 있는 고객은 재진입 시 진입 이벤트가 없어 봇 인사말이
+ * 첫 웹훅이 되는데, 이 조회가 없으면 고객이 뭔가 입력할 때까지 발송이 밀린다.
+ */
+export async function fetchChannelTalkChatUserId(
+  userChatId: string
+): Promise<string | null> {
+  const creds = credentials();
+  if (!creds) {
+    console.warn("[channel-talk api] 액세스 키 미설정 — 유저챗 조회를 건너뜀");
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_HOST}/open/v5/user-chats/${encodeURIComponent(userChatId)}`,
+      {
+        headers: {
+          "x-access-key": creds.key,
+          "x-access-secret": creds.secret,
+        },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      }
+    );
+    if (!response.ok) {
+      console.warn(`[channel-talk api] 유저챗 조회 HTTP ${response.status}`);
+      return null;
+    }
+
+    const body = (await response.json()) as {
+      userChat?: { userId?: unknown };
+      user?: { id?: unknown };
+    };
+    const userId = body.userChat?.userId ?? body.user?.id;
+    return typeof userId === "string" && userId ? userId : null;
+  } catch (error) {
+    console.warn(
+      `[channel-talk api] 유저챗 조회 실패: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return null;
+  }
+}
+
 export async function fetchChannelTalkUserPhone(
   personId: string
 ): Promise<ChannelTalkUserLookup> {
