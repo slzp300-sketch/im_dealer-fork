@@ -21,7 +21,20 @@ import {
   dispatchQuoteDeliveryByRequestCode,
   hasAwaitingQuoteDelivery,
 } from "@/lib/quote-delivery/dispatch";
-import { fetchChannelTalkUserPhone } from "@/lib/channel-talk-open-api";
+import {
+  fetchChannelTalkChatUserId,
+  fetchChannelTalkUserPhone,
+  sendChannelTalkChatMessage,
+} from "@/lib/channel-talk-open-api";
+
+/**
+ * 견적서 적재 직후 그 상담방에만 남기는 안내. 워크플로우 인사말은 견적서와 무관한
+ * 일반 문의에도 나가므로 이 문구를 거기에 둘 수 없다 — 발송이 실제로 일어난
+ * 상담방에서만 서버가 직접 말한다. 전송 실패는 안내가 안 보일 뿐이라 발송 결과에
+ * 영향을 주지 않는다.
+ */
+const QUOTE_SENT_NOTICE =
+  "요청하신 견적서를 카카오톡 알림톡으로 보내드렸어요 📄\n추가로 요청하실 사항이 있으신가요? 이 채팅에 남겨주시면 상담사가 도와드립니다.";
 
 export const runtime = "nodejs";
 
@@ -147,6 +160,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, skipped: "other_type" });
   }
 
+  // 안내 메시지를 남길 상담방. 유저챗이 아닌 이벤트(그룹 대화 등)면 null 이라
+  // 안내 없이 발송만 된다.
+  const userChatId = extractUserChatId(body);
+
   try {
     if (requestCode) {
       const result = await dispatchQuoteDeliveryByRequestCode(requestCode);
@@ -157,6 +174,7 @@ export async function POST(request: NextRequest) {
       // 요청번호와 deliveryId 는 로그·응답에 실지 않는다. 견적서 링크가 유출되면
       // 아무나 열어볼 수 있으므로, 어드민 발송 이력으로 대신 추적한다.
       console.log(`[channel-talk webhook] 견적서 적재`);
+      if (userChatId) await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
       return NextResponse.json({ ok: true });
     }
 
@@ -164,8 +182,14 @@ export async function POST(request: NextRequest) {
     // 상담 정보를 채널톡에 넘기지 않아(채널톡 공식 확인) 요청번호가 자동으로 실려
     // 올 수 없다 — 상담을 연 고객이 "누구인지"(personId → 프로필 전화번호)로 대기
     // 중인 견적서를 찾는다. 일반 문의는 대기 건이 없어 그대로 지나간다.
+    //
+    // 워크플로우·봇 메시지에는 고객 personId 가 없다. 그런데 상담이 이미 열려 있는
+    // 고객이 재진입하면 진입 이벤트가 따로 없어 봇 인사말이 그 상담의 첫 웹훅이
+    // 된다 — 이때는 메시지가 속한 유저챗의 주인을 조회해 같은 매칭을 돌린다.
+    // 견적서는 어차피 "그 방 고객 본인의" 전화번호로만 매칭되므로, 봇 이벤트로
+    // 남의 견적서가 나갈 여지는 없다.
     const personId = extractCustomerPersonId(body);
-    if (!personId) {
+    if (!personId && !userChatId) {
       return NextResponse.json({ ok: true, skipped: "no_request_code" });
     }
 
@@ -178,11 +202,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "no_awaiting" });
     }
 
-    const lookup = await fetchChannelTalkUserPhone(personId);
+    const customerId =
+      personId ?? (userChatId ? await fetchChannelTalkChatUserId(userChatId) : null);
+    if (!customerId) {
+      return NextResponse.json({ ok: true, skipped: "no_chat_user" });
+    }
+
+    const lookup = await fetchChannelTalkUserPhone(customerId);
     // 관측용 — 카카오 경유 고객의 프로필에 번호가 실리는지가 이 설계의 판정 기준이다.
     // 번호 값 자체는 남기지 않는다.
     console.log(
-      `[channel-talk webhook] profile ok=${lookup.ok} phone=${lookup.phone ? "present" : "absent"} profileKeys=${lookup.profileKeys.join(",")}`
+      `[channel-talk webhook] profile ok=${lookup.ok} via=${personId ? "person" : "chat"} phone=${lookup.phone ? "present" : "absent"} profileKeys=${lookup.profileKeys.join(",")}`
     );
     if (!lookup.phone) {
       return NextResponse.json({ ok: true, skipped: "no_phone" });
@@ -197,12 +227,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: result.reason });
     }
     console.log(`[channel-talk webhook] 견적서 적재 (전화번호 매칭)`);
+    if (userChatId) await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[channel-talk webhook]", error);
     // 재시도 폭주를 막으려 200 으로 닫는다. 누락 건은 어드민에서 수동 발송한다.
     return NextResponse.json({ ok: true, skipped: "error" });
   }
+}
+
+/**
+ * 봇·워크플로우 메시지가 속한 유저챗 id. 고객 personId 가 없을 때 상담방 주인을
+ * 조회하는 데 쓴다. 그룹 대화 등 유저챗이 아닌 방(chatType 이 다름)은 제외한다.
+ */
+export function extractUserChatId(body: unknown): string | null {
+  const entity = (body as { entity?: unknown } | null)?.entity;
+  if (!entity || typeof entity !== "object") return null;
+  const record = entity as Record<string, unknown>;
+
+  if (typeof record.chatType === "string" && !/^userchat$/i.test(record.chatType)) {
+    return null;
+  }
+  return typeof record.chatId === "string" && record.chatId ? record.chatId : null;
 }
 
 /**
