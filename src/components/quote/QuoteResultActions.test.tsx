@@ -243,6 +243,23 @@ describe("QuoteResultActions", () => {
       ).toBeInTheDocument();
     });
 
+    // 상담전환톡 흐름 — 이미 카카오톡으로 안내가 나갔다. 붙여넣기 경고·보냈어요
+    // 자가 확인을 그리면 고객이 무엇을 해야 하는지 알 수 없게 된다.
+    it("When the alimtalk went out Then it points at the Kakao message instead of paste", () => {
+      render(
+        <QuoteResultActions {...stopgapProps} deliverySuccess alimtalkDelivery />
+      );
+
+      const status = screen.getByRole("status");
+      expect(status).toHaveTextContent("카카오톡으로 안내 메시지를 보냈어요");
+      expect(status).not.toHaveTextContent("아직 보내지 않았어요");
+      expect(status).not.toHaveTextContent("붙여넣기");
+      expect(screen.queryByRole("button", { name: "보냈어요" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "대화창 다시 열기" })
+      ).not.toBeInTheDocument();
+    });
+
     it("When the chat window was closed Then it offers to reopen it", () => {
       const onReopenChannelChat = vi.fn<() => void>();
       render(

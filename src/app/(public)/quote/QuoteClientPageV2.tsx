@@ -1820,6 +1820,7 @@ export function QuoteClientPageV2({ vehicles }: { vehicles: VehicleListItem[] })
               onReopenChannelChat={handleReopenChannelChat}
               onConfirmChannelSent={handleConfirmChannelSent}
               deliveryConfirmedBySender={deliveryConfirmedBySender}
+              alimtalkDelivery={deliveryGuideVariant === "alimtalk"}
               onCustomRatesChange={setCustomRates}
               onCostModeChange={setCostMode}
               onReset={restoreBaseStandardScenario}
@@ -1984,6 +1985,7 @@ function Step3ResultHeader({
   onReopenChannelChat,
   onConfirmChannelSent,
   deliveryConfirmedBySender,
+  alimtalkDelivery,
   onCustomRatesChange,
   onCostModeChange,
   onReset,
@@ -2020,6 +2022,7 @@ function Step3ResultHeader({
   onReopenChannelChat: () => void;
   onConfirmChannelSent: () => void;
   deliveryConfirmedBySender: boolean;
+  alimtalkDelivery: boolean;
   onCustomRatesChange: (rates: { depositRate: number; prepayRate: number }) => void;
   onCostModeChange: (mode: CostMode) => void;
   onReset: () => void;
@@ -2065,6 +2068,7 @@ function Step3ResultHeader({
     onReopenChannelChat,
     onConfirmChannelSent,
     deliveryConfirmedBySender,
+    alimtalkDelivery,
   };
 
   return (

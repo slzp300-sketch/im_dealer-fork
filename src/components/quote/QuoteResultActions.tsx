@@ -33,6 +33,11 @@ interface QuoteResultDeliveryProps {
   readonly onConfirmChannelSent: () => void;
   /** 고객이 전송을 확인했는지. 웹에서는 실제 전송 여부를 알 수 없어 자가 신고로 받는다. */
   readonly deliveryConfirmedBySender: boolean;
+  /**
+   * 상담전환톡이 이미 카카오톡으로 나간 흐름(대기 모드). 붙여넣을 것이 없으므로
+   * "아직 안 보냈다" 경고·보냈어요 버튼 대신 받은 메시지의 버튼 안내만 그린다.
+   */
+  readonly alimtalkDelivery?: boolean;
 }
 
 interface QuoteResultActionsProps extends QuoteResultDeliveryProps {
@@ -58,6 +63,7 @@ export function QuoteResultDeliveryBar({
   onReopenChannelChat,
   onConfirmChannelSent,
   deliveryConfirmedBySender,
+  alimtalkDelivery = false,
 }: QuoteResultDeliveryProps) {
   if (!hasQuoteResultDelivery({ kakaoDeliveryEnabled, channelTalkDelivery })) {
     return null;
@@ -79,7 +85,20 @@ export function QuoteResultDeliveryBar({
             안내하고 고객이 '보냈어요'로 직접 넘기게 한다. 연 것만으로 완료처럼 보이면
             기다리다 이탈하고, 보낸 뒤에도 경고가 남으면 불안해진다. */}
         {deliverySuccess ? (
-          channelTalkDelivery ? (
+          channelTalkDelivery && alimtalkDelivery ? (
+            // 상담전환톡 흐름 — 이미 카카오톡으로 안내가 나갔다. 붙여넣기 지시를 섞으면
+            // 고객이 무엇을 해야 하는지 알 수 없게 되므로 받은 메시지의 버튼만 가리킨다.
+            <p
+              role="status"
+              className="flex items-start gap-2 rounded-[12px] border border-brand/20 bg-brand-soft p-3 text-[12px] font-semibold text-brand"
+            >
+              <CheckCircle2 aria-hidden="true" size={14} className="mt-0.5 shrink-0" />
+              <span>
+                카카오톡으로 안내 메시지를 보냈어요. 메시지의 「견적서 받기」 버튼을
+                누르시면 견적서를 바로 보내드려요.
+              </span>
+            </p>
+          ) : channelTalkDelivery ? (
             <div
               className={`space-y-2 rounded-[12px] border p-3 ${
                 deliveryConfirmedBySender

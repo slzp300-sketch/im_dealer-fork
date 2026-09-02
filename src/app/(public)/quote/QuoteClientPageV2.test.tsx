@@ -870,6 +870,22 @@ describe("QuoteClientPageV2 consultation fallback", () => {
     // 붙여넣을 것이 없으므로 복사하지 않고, 대화창도 열지 않는다.
     expect(writeText).not.toHaveBeenCalled();
     expect(openSpy).not.toHaveBeenCalled();
+
+    // 모달을 닫은 뒤에도 하단 바가 붙여넣기 경고를 그리면 지시가 다시 두 개가 된다 —
+    // 받은 메시지의 버튼 안내만 남는다.
+    fireEvent.click(screen.getByRole("button", { name: "확인" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "카카오톡을 확인해 주세요" })
+      ).not.toBeInTheDocument()
+    );
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("카카오톡으로 안내 메시지를 보냈어요");
+    expect(status).not.toHaveTextContent("아직 보내지 않았어요");
+    expect(screen.queryByRole("button", { name: "보냈어요" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "대화창 다시 열기" })
+    ).not.toBeInTheDocument();
   });
 
   // 상담전환톡이 나가지 못하면 고객은 카카오톡을 열어봐도 아무것도 받지 못한다.
