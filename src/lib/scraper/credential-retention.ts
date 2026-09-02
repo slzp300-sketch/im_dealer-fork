@@ -10,6 +10,14 @@ export const SCRAPE_CREDENTIAL_RETENTION_MS = 24 * 60 * 60 * 1000;
 /** Keep this aligned with the worker's stale-lease reclaim threshold. */
 export const SCRAPE_JOB_STALE_HEARTBEAT_MS = 3 * 60 * 1000;
 
+/**
+ * A job that sat unfinished for a full day is stale work nobody is waiting on.
+ * Claiming it late hijacks whichever worker comes online next (human-login
+ * capitals never hit the credential expiry above because they store none), so
+ * the claim route discards such jobs instead of handing them out.
+ */
+export const SCRAPE_JOB_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 const ACTIVE_SCRAPE_JOB_STATUSES = ["running", "needs_human"] as const;
 const INACTIVE_SCRAPE_JOB_STATUSES = ["pending", "completed", "failed", "canceled"] as const;
 
