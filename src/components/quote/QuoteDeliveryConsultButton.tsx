@@ -3,16 +3,12 @@
 import { useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { openChannelTalk } from "@/lib/channel-talk";
+import { isMobileDevice } from "@/lib/browser/device";
 import { kakaoChannelChatUrl } from "@/lib/kakao/channel-add";
 
 /** 고객이 대화창에 붙여넣을 문구. 상담사가 어떤 견적인지 바로 찾도록 견적번호를 넣는다. */
 export function buildQuoteConsultMessage(vehicleName: string, deliveryId: string): string {
   return `[견적 문의] ${vehicleName}\n견적서 확인했습니다. 상담 부탁드립니다.\n견적번호: ${deliveryId}`;
-}
-
-function isMobileAgent(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
 interface QuoteDeliveryConsultButtonProps {
@@ -40,7 +36,7 @@ export function QuoteDeliveryConsultButton({
 
     const chatUrl = kakaoChannelChatUrl();
     const opened =
-      isMobileAgent() && chatUrl
+      isMobileDevice() && chatUrl
         ? Boolean(window.open(chatUrl, "_blank", "noopener,noreferrer"))
         : openChannelTalk();
     // 팝업이 막혔거나 채널톡이 아직 안 떴으면 같은 탭에서라도 대화창으로 보낸다.

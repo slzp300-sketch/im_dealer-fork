@@ -1,3 +1,6 @@
+import { isMobileDevice } from "@/lib/browser/device";
+import { kakaoChannelChatUrl } from "@/lib/kakao/channel-add";
+
 export interface ChannelTalkQuoteContext {
   quoteId: string;
   sessionId: string;
@@ -18,19 +21,33 @@ export function isChannelTalkSuppressedPath(pathOrUrl: string): boolean {
   );
 }
 
+// 모바일은 채널톡 위젯 대신 카카오 채널 대화방으로 보낸다(접속 환경별 분리 — PC는
+// 위젯 유지). 반드시 클릭 핸들러에서 동기적으로 window.open 해야 팝업 차단을 피한다.
+// 팝업이 막히면 같은 탭 이동으로 폴백한다. 카카오 URL 미설정이면 false 로 위젯에 맡긴다.
+function openKakaoChat(): boolean {
+  const url = kakaoChannelChatUrl();
+  if (!url) return false;
+  const opened = Boolean(window.open(url, "_blank", "noopener,noreferrer"));
+  if (!opened) window.location.href = url;
+  return true;
+}
+
 export function openChannelTalk(): boolean {
-  if (typeof window === "undefined" || !window.ChannelIO) {
-    return false;
-  }
+  if (typeof window === "undefined") return false;
+  // 모바일: 전면 카카오 전환. PC: 채널톡 위젯 유지.
+  if (isMobileDevice() && openKakaoChat()) return true;
+  if (!window.ChannelIO) return false;
 
   window.ChannelIO("showMessenger");
   return true;
 }
 
 export function openChannelTalkWithQuote(context: ChannelTalkQuoteContext): boolean {
-  if (typeof window === "undefined" || !window.ChannelIO) {
-    return false;
-  }
+  if (typeof window === "undefined") return false;
+  // 모바일은 카카오로 보낸다. 견적 컨텍스트 track 은 웹 위젯(브라우저) 식별 기준이라
+  // 카카오(별도 식별)엔 붙지 않으므로 이 경로에선 생략한다.
+  if (isMobileDevice() && openKakaoChat()) return true;
+  if (!window.ChannelIO) return false;
 
   window.ChannelIO("track", "quote_consultation_requested", context);
   window.ChannelIO("showMessenger");
