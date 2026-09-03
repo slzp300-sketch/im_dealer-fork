@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   fetchPhone: vi.fn(),
   fetchChatUserId: vi.fn(),
   sendChatMessage: vi.fn(),
+  addUserTag: vi.fn(),
+  openUserChat: vi.fn(),
   checkRateLimit: vi.fn(async (): Promise<NextResponse | null> => null),
 }));
 
@@ -21,6 +23,8 @@ vi.mock("@/lib/channel-talk-open-api", () => ({
   fetchChannelTalkUserPhone: mocks.fetchPhone,
   fetchChannelTalkChatUserId: mocks.fetchChatUserId,
   sendChannelTalkChatMessage: mocks.sendChatMessage,
+  addChannelTalkUserTag: mocks.addUserTag,
+  openChannelTalkUserChat: mocks.openUserChat,
 }));
 
 // 로컬·CI 에는 Upstash 가 없어 실제 limiter 는 전부 null 이다. 호출 여부와
@@ -73,6 +77,8 @@ beforeEach(() => {
   mocks.fetchPhone.mockResolvedValue({ ok: true, phone: "+821012345678", profileKeys: [] });
   mocks.fetchChatUserId.mockResolvedValue("chat-owner-1");
   mocks.sendChatMessage.mockResolvedValue(true);
+  mocks.addUserTag.mockResolvedValue(true);
+  mocks.openUserChat.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -353,6 +359,92 @@ describe("POST /api/channel-talk/webhook", () => {
     await POST(webhookRequest(body));
 
     expect(mocks.sendChatMessage).not.toHaveBeenCalled();
+  });
+
+  // 견적서 진입 고객에게 「유입/견적서」 태그를 붙여 워크플로우 인사말을 생략시킨다.
+  it("전화번호 매칭 적재 성공 시 고객에게 유입 태그를 부여한다", async () => {
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.addUserTag).toHaveBeenCalledWith("person-1", "유입/견적서");
+  });
+
+  it("요청번호 적재 성공 시 유저챗 주인에게 유입 태그를 부여한다", async () => {
+    const body = {
+      type: "Message",
+      entity: { plainText: "요청번호 AB23CD", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.fetchChatUserId).toHaveBeenCalledWith("chat-1");
+    expect(mocks.addUserTag).toHaveBeenCalledWith("chat-owner-1", "유입/견적서");
+  });
+
+  it("견적서가 발송되지 않으면 태그도 부여하지 않는다", async () => {
+    mocks.dispatchByPhone.mockResolvedValue({ ok: false, reason: "not_found" });
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.addUserTag).not.toHaveBeenCalled();
+  });
+
+  // 견적서 상담을 수신함에 올리는 것은 플래그로만 켠다 — 기본(꺼짐)에선 상담을
+  // 열지 않아 봇 관망 정책·워크플로우와 충돌하지 않는다.
+  it("플래그가 꺼져 있으면 상담을 열지 않는다(기본)", async () => {
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.openUserChat).not.toHaveBeenCalled();
+  });
+
+  it("플래그가 켜지면 전화번호 매칭 적재 성공 시 그 상담을 수신함에 연다", async () => {
+    vi.stubEnv("QUOTE_CONSULT_OPEN_INBOX", "true");
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.openUserChat).toHaveBeenCalledWith("chat-1");
+  });
+
+  it("플래그가 켜지면 요청번호 적재 성공 시에도 상담을 연다", async () => {
+    vi.stubEnv("QUOTE_CONSULT_OPEN_INBOX", "true");
+    const body = {
+      type: "Message",
+      entity: { plainText: "요청번호 AB23CD", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.openUserChat).toHaveBeenCalledWith("chat-1");
+  });
+
+  it("플래그가 켜져도 발송이 일어나지 않으면 상담을 열지 않는다", async () => {
+    vi.stubEnv("QUOTE_CONSULT_OPEN_INBOX", "true");
+    mocks.dispatchByPhone.mockResolvedValue({ ok: false, reason: "not_found" });
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.openUserChat).not.toHaveBeenCalled();
   });
 
   it("상담방 id 가 없으면 안내 없이 발송만 한다", async () => {

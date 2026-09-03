@@ -22,19 +22,32 @@ import {
   hasAwaitingQuoteDelivery,
 } from "@/lib/quote-delivery/dispatch";
 import {
+  addChannelTalkUserTag,
   fetchChannelTalkChatUserId,
   fetchChannelTalkUserPhone,
+  openChannelTalkUserChat,
   sendChannelTalkChatMessage,
 } from "@/lib/channel-talk-open-api";
+
+/**
+ * 견적서 흐름으로 진입한 고객에게 붙이는 고객 태그. 카카오 워크플로우가 이 태그를
+ * 보고 인사말을 생략한다(태그 이름은 채널톡 협의값, 2026-09-02). 해제는 워크플로우가
+ * 담당한다. 웹훅 수신 직후 되도록 먼저 부여해, 워크플로우 인사말보다 앞서게 한다.
+ */
+const QUOTE_INFLOW_TAG = "유입/견적서";
 
 /**
  * 견적서 적재 직후 그 상담방에만 남기는 안내. 워크플로우 인사말은 견적서와 무관한
  * 일반 문의에도 나가므로 이 문구를 거기에 둘 수 없다 — 발송이 실제로 일어난
  * 상담방에서만 서버가 직접 말한다. 전송 실패는 안내가 안 보일 뿐이라 발송 결과에
  * 영향을 주지 않는다.
+ *
+ * 문구는 "보냈다"(완료형)가 아니라 "곧 도착"(진행형)으로 둔다 — 견적서 알림톡은
+ * 릴레이가 폴링해 발송하므로(수 초 지연), 이 안내가 견적서보다 먼저 뜨는 경우가
+ * 많다. 완료형이면 "보냈다는데 아직 안 옴"으로 읽혀 순서가 어색해진다.
  */
 const QUOTE_SENT_NOTICE =
-  "요청하신 견적서를 카카오톡 알림톡으로 보내드렸어요 📄\n추가로 요청하실 사항이 있으신가요? 이 채팅에 남겨주시면 상담사가 도와드립니다.";
+  "요청하신 견적서를 카카오톡으로 보내드리고 있어요 📄 잠시 후 도착합니다.\n추가로 궁금하신 점은 이 채팅에 남겨주시면 상담사가 도와드립니다.";
 
 export const runtime = "nodejs";
 
@@ -56,6 +69,14 @@ function isAwaitMatchingEnabled(): boolean {
     process.env.QUOTE_DELIVERY_AWAIT_MESSAGE === "true" &&
     process.env.NEXT_PUBLIC_KAKAO_QUOTE_AUTO_SEND !== "true"
   );
+}
+
+/**
+ * 견적서 상담을 데스크 수신함에 올릴지(상담 열기 호출 여부). 봇 관망 정책·워크플로우
+ * 충돌 여부를 실사이트에서 확인한 뒤 켠다 — 기본 꺼짐이라 켜기 전엔 동작 변화가 없다.
+ */
+function isOpenInboxEnabled(): boolean {
+  return process.env.QUOTE_CONSULT_OPEN_INBOX === "true";
 }
 
 /**
@@ -174,7 +195,14 @@ export async function POST(request: NextRequest) {
       // 요청번호와 deliveryId 는 로그·응답에 실지 않는다. 견적서 링크가 유출되면
       // 아무나 열어볼 수 있으므로, 어드민 발송 이력으로 대신 추적한다.
       console.log(`[channel-talk webhook] 견적서 적재`);
-      if (userChatId) await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
+      // 견적서 진입 고객 표시 → 워크플로우 인사말 생략. 유저챗 주인에게 부여한다.
+      if (userChatId) {
+        const owner = await fetchChannelTalkChatUserId(userChatId);
+        if (owner) await addChannelTalkUserTag(owner, QUOTE_INFLOW_TAG);
+        // 상담사가 이 리드를 확인·응대할 수 있게 수신함에 올린다(플래그로 켜야 동작).
+        if (isOpenInboxEnabled()) await openChannelTalkUserChat(userChatId);
+        await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -227,7 +255,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: result.reason });
     }
     console.log(`[channel-talk webhook] 견적서 적재 (전화번호 매칭)`);
-    if (userChatId) await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
+    // 견적서 진입 고객 표시 → 워크플로우 인사말 생략. 안내 메시지보다 먼저 부여한다.
+    await addChannelTalkUserTag(customerId, QUOTE_INFLOW_TAG);
+    if (userChatId) {
+      // 상담사가 이 리드를 확인·응대할 수 있게 수신함에 올린다(플래그로 켜야 동작).
+      if (isOpenInboxEnabled()) await openChannelTalkUserChat(userChatId);
+      await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[channel-talk webhook]", error);
