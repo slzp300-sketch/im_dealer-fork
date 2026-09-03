@@ -37,14 +37,15 @@ import {
 const QUOTE_INFLOW_TAG = "유입/견적서";
 
 /**
- * 견적서 적재 직후 그 상담방에만 남기는 안내. 워크플로우 인사말은 견적서와 무관한
- * 일반 문의에도 나가므로 이 문구를 거기에 둘 수 없다 — 발송이 실제로 일어난
- * 상담방에서만 서버가 직접 말한다. 전송 실패는 안내가 안 보일 뿐이라 발송 결과에
- * 영향을 주지 않는다.
+ * 견적서 적재 직후 그 상담방에만 남기는 안내(기본 미발송 — QUOTE_SENT_NOTICE_ENABLED
+ * 로만 켠다). 실측 결과 견적서 알림톡이 이 안내 1~2초 뒤에 바로 도착해 "곧 도착"
+ * 안내가 사실상 불필요했고, "추가 문의는 여기에" 역할도 워크플로우 인사말·버튼이
+ * 대신한다(중복). 또한 이미 열린 상담에서는 이 봇 메시지 posting 이 422 로 거부돼
+ * 실패 로그만 남겼다. 그래서 기본은 보내지 않되, 릴레이 지연이 커지는 상황을 대비해
+ * 플래그로 되살릴 수 있게 남겨 둔다.
  *
- * 문구는 "보냈다"(완료형)가 아니라 "곧 도착"(진행형)으로 둔다 — 견적서 알림톡은
- * 릴레이가 폴링해 발송하므로(수 초 지연), 이 안내가 견적서보다 먼저 뜨는 경우가
- * 많다. 완료형이면 "보냈다는데 아직 안 옴"으로 읽혀 순서가 어색해진다.
+ * 문구는 "보냈다"(완료형)가 아니라 "곧 도착"(진행형)으로 둔다 — 릴레이 지연 때문에
+ * 이 안내가 견적서보다 먼저 뜰 수 있어, 완료형이면 "보냈다는데 아직 안 옴"으로 읽힌다.
  */
 const QUOTE_SENT_NOTICE =
   "요청하신 견적서를 카카오톡으로 보내드리고 있어요 📄 잠시 후 도착합니다.\n추가로 궁금하신 점은 이 채팅에 남겨주시면 상담사가 도와드립니다.";
@@ -77,6 +78,15 @@ function isAwaitMatchingEnabled(): boolean {
  */
 function isOpenInboxEnabled(): boolean {
   return process.env.QUOTE_CONSULT_OPEN_INBOX === "true";
+}
+
+/**
+ * 견적서 적재 후 상담방에 "곧 도착" 안내를 남길지. 기본 꺼짐 — 견적서가 1~2초 뒤에
+ * 바로 오고 워크플로우 인사말·버튼이 후속 안내를 대신해 평소엔 불필요하다. 릴레이
+ * 지연이 커질 때만 켠다.
+ */
+function isQuoteSentNoticeEnabled(): boolean {
+  return process.env.QUOTE_SENT_NOTICE_ENABLED === "true";
 }
 
 /**
@@ -201,7 +211,8 @@ export async function POST(request: NextRequest) {
         if (owner) await addChannelTalkUserTag(owner, QUOTE_INFLOW_TAG);
         // 상담사가 이 리드를 확인·응대할 수 있게 수신함에 올린다(플래그로 켜야 동작).
         if (isOpenInboxEnabled()) await openChannelTalkUserChat(userChatId);
-        await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
+        if (isQuoteSentNoticeEnabled())
+          await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
       }
       return NextResponse.json({ ok: true });
     }
@@ -260,7 +271,8 @@ export async function POST(request: NextRequest) {
     if (userChatId) {
       // 상담사가 이 리드를 확인·응대할 수 있게 수신함에 올린다(플래그로 켜야 동작).
       if (isOpenInboxEnabled()) await openChannelTalkUserChat(userChatId);
-      await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
+      if (isQuoteSentNoticeEnabled())
+        await sendChannelTalkChatMessage(userChatId, QUOTE_SENT_NOTICE);
     }
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -317,9 +317,23 @@ describe("POST /api/channel-talk/webhook", () => {
     expect(mocks.fetchPhone).toHaveBeenCalledWith("person-1");
   });
 
-  // 워크플로우 인사말은 모든 상담에 나가므로 "보내드렸어요" 문구를 거기에 둘 수
-  // 없다 — 발송이 실제로 일어난 상담방에만 서버가 안내를 남긴다.
-  it("적재에 성공하면 그 상담방에 안내 메시지를 남긴다", async () => {
+  // 상담방 안내는 기본 미발송이다 — 견적서가 1~2초 뒤에 바로 오고 워크플로우
+  // 인사말·버튼이 후속 안내를 대신해 평소엔 불필요하다. 플래그로만 켠다.
+  it("기본(플래그 꺼짐)에서는 상담방 안내 메시지를 보내지 않는다", async () => {
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    const res = await POST(webhookRequest(body));
+
+    expect(res.status).toBe(200);
+    expect(mocks.dispatchByPhone).toHaveBeenCalled(); // 견적서는 나간다
+    expect(mocks.sendChatMessage).not.toHaveBeenCalled(); // 안내만 안 나간다
+  });
+
+  it("플래그가 켜지면 적재 성공 시 그 상담방에 안내 메시지를 남긴다", async () => {
+    vi.stubEnv("QUOTE_SENT_NOTICE_ENABLED", "true");
     const body = {
       type: "message",
       entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
@@ -334,7 +348,8 @@ describe("POST /api/channel-talk/webhook", () => {
     );
   });
 
-  it("요청번호 발송에 성공해도 상담방 안내를 남긴다", async () => {
+  it("플래그가 켜지면 요청번호 발송에 성공해도 상담방 안내를 남긴다", async () => {
+    vi.stubEnv("QUOTE_SENT_NOTICE_ENABLED", "true");
     const body = {
       type: "Message",
       entity: { plainText: "요청번호 AB23CD", chatId: "chat-1" },
@@ -349,7 +364,8 @@ describe("POST /api/channel-talk/webhook", () => {
     );
   });
 
-  it("발송이 일어나지 않으면 안내 메시지도 남기지 않는다", async () => {
+  it("플래그가 켜져도 발송이 일어나지 않으면 안내 메시지도 남기지 않는다", async () => {
+    vi.stubEnv("QUOTE_SENT_NOTICE_ENABLED", "true");
     mocks.dispatchByPhone.mockResolvedValue({ ok: false, reason: "not_found" });
     const body = {
       type: "message",
@@ -447,7 +463,8 @@ describe("POST /api/channel-talk/webhook", () => {
     expect(mocks.openUserChat).not.toHaveBeenCalled();
   });
 
-  it("상담방 id 가 없으면 안내 없이 발송만 한다", async () => {
+  it("상담방 id 가 없으면 (안내 플래그가 켜져 있어도) 안내 없이 발송만 한다", async () => {
+    vi.stubEnv("QUOTE_SENT_NOTICE_ENABLED", "true");
     const res = await POST(webhookRequest(phoneMatchBody()));
 
     expect(res.status).toBe(200);
