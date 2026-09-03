@@ -90,6 +90,17 @@ function isQuoteSentNoticeEnabled(): boolean {
 }
 
 /**
+ * 카카오 상담에 고객이 메시지를 보내면 그 상담을 데스크 수신함에 올릴지(open).
+ * 실측 결과 open 은 AI(ALF) 응대를 멈추지 않아 "AI 계속 + 수신함 노출"이 함께 된다
+ * (운영 확인, 2026-09-03). 이걸 켜면 상담사가 참여 중인 고객을 실시간으로 보고
+ * 필요할 때 인계할 수 있다. 웹훅에서 웹↔카카오 유입 경로를 구분할 수 없어(식별 단절)
+ * 특정 진입만 고를 수 없으므로, 켜면 모든 카카오 상담에 적용된다.
+ */
+function isOpenOnMessageEnabled(): boolean {
+  return process.env.OPEN_CONSULT_ON_MESSAGE === "true";
+}
+
+/**
  * 웹훅 본문에서 고객이 보낸 텍스트를 찾는다.
  * 채널톡 문서가 payload 예시를 싣지 않아 필드명을 단정할 수 없다. 알려진 후보를
  * 먼저 보고, 없으면 entity 안의 문자열을 모아 훑는다 — 요청번호만 찾으면 되므로
@@ -195,15 +206,11 @@ export async function POST(request: NextRequest) {
   // 안내 없이 발송만 된다.
   const userChatId = extractUserChatId(body);
 
-  // [임시 검증] 고객이 메시지를 보낼 때 그 상담을 수신함에 올려본다 — open 호출이
-  // AI(ALF)를 멈추는지 실측하기 위한 것. 플래그(OPEN_CONSULT_ON_MESSAGE)로만 동작하고,
-  // personType=user 인 고객 메시지에만 건다(봇·매니저 제외). 검증이 끝나면 제거한다.
-  if (
-    process.env.OPEN_CONSULT_ON_MESSAGE === "true" &&
-    userChatId &&
-    extractCustomerPersonId(body)
-  ) {
-    console.log("[channel-talk webhook] [검증] 고객 메시지 → 상담 열기 시도");
+  // 고객이 메시지를 보내면 그 상담을 수신함에 올린다(open). open 은 AI 응대를 멈추지
+  // 않으므로, 고객은 AI 와 계속 대화하면서 상담사도 수신함에서 그 상담을 보고 필요할 때
+  // 인계할 수 있다. personType=user(고객)의 메시지에만 걸어 봇·매니저 발신은 제외한다.
+  // 견적서 흐름(요청번호/전화번호 매칭)과 무관하게, 일반 문의도 여기서 수신함에 오른다.
+  if (isOpenOnMessageEnabled() && userChatId && extractCustomerPersonId(body)) {
     await openChannelTalkUserChat(userChatId);
   }
 

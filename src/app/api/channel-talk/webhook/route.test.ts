@@ -463,6 +463,51 @@ describe("POST /api/channel-talk/webhook", () => {
     expect(mocks.openUserChat).not.toHaveBeenCalled();
   });
 
+  // OPEN_CONSULT_ON_MESSAGE — 고객이 메시지를 보내면 견적서와 무관하게 그 상담을
+  // 수신함에 올린다(open 은 AI 를 멈추지 않으므로 AI 유지 + 수신함 노출). 플래그로만.
+  it("OPEN_CONSULT_ON_MESSAGE 가 켜지면 고객 메시지에 그 상담을 연다", async () => {
+    vi.stubEnv("OPEN_CONSULT_ON_MESSAGE", "true");
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.openUserChat).toHaveBeenCalledWith("chat-1");
+  });
+
+  it("OPEN_CONSULT_ON_MESSAGE 가 켜져도 고객(user)이 아닌 발신은 열지 않는다", async () => {
+    vi.stubEnv("OPEN_CONSULT_ON_MESSAGE", "true");
+    const body = {
+      type: "message",
+      entity: { personType: "bot", chatType: "userChat", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.openUserChat).not.toHaveBeenCalled();
+  });
+
+  it("OPEN_CONSULT_ON_MESSAGE 가 켜져도 상담방 id 가 없으면 열지 않는다", async () => {
+    vi.stubEnv("OPEN_CONSULT_ON_MESSAGE", "true");
+    const res = await POST(webhookRequest(phoneMatchBody())); // chatId 없음
+
+    expect(res.status).toBe(200);
+    expect(mocks.openUserChat).not.toHaveBeenCalled();
+  });
+
+  it("OPEN_CONSULT_ON_MESSAGE 가 꺼져 있으면 고객 메시지에도 열지 않는다(기본)", async () => {
+    const body = {
+      type: "message",
+      entity: { personType: "user", personId: "person-1", chatId: "chat-1" },
+    };
+
+    await POST(webhookRequest(body));
+
+    expect(mocks.openUserChat).not.toHaveBeenCalled();
+  });
+
   it("상담방 id 가 없으면 (안내 플래그가 켜져 있어도) 안내 없이 발송만 한다", async () => {
     vi.stubEnv("QUOTE_SENT_NOTICE_ENABLED", "true");
     const res = await POST(webhookRequest(phoneMatchBody()));
