@@ -29,6 +29,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: {
+      // ChannelTalkButton 이 useAuthUser 를 통해 getUser 를 호출한다(비회원으로 응답).
+      getUser: () => Promise.resolve({ data: { user: null } }),
       onAuthStateChange: auth.onAuthStateChange,
     },
   }),

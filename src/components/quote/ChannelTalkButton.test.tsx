@@ -1,7 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CHANNEL_TALK_STATUS_ATTR } from "@/lib/channel-talk-status";
 import { ChannelTalkButton } from "./ChannelTalkButton";
+
+// useConsultEntry → useAuthUser 가 Supabase 클라이언트를 만들지 않도록 훅을 대체한다.
+// 플래그 기본 꺼짐 + 비회원이라 기존 동작(openChannelTalk)이 그대로 유지된다.
+vi.mock("@/hooks/useAuthUser", () => ({
+  useAuthUser: () => ({ user: null, isLoading: false }),
+}));
 
 afterEach(() => {
   delete window.ChannelIO;

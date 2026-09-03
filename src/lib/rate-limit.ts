@@ -96,7 +96,18 @@ export const withdrawRateLimit = redis
     })
   : null;
 
-// 9. 후기 이미지 업로드 — 분당 최대 20회. 토큰당 5장 쿼터와 별개의 IP 폭주 방어.
+// 9. 상담 신청 알림톡(공용) — IP+번호당 분당 최대 3회. 임의 전화번호로 알림톡을
+// 반복 발송하는 스팸·문자폭탄과 비즈톡 발송 비용 소진 방어(easyAuth 와 동일 강도).
+export const consultRequestRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(3, "1 m"),
+      ephemeralCache: cache,
+      prefix: "ratelimit:consult-request",
+    })
+  : null;
+
+// 10. 후기 이미지 업로드 — 분당 최대 20회. 토큰당 5장 쿼터와 별개의 IP 폭주 방어.
 export const reviewImageRateLimit = redis
   ? new Ratelimit({
       redis,

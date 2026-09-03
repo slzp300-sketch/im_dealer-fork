@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Headset, MessageCircle, Phone, X } from "lucide-react";
-import {
-  isChannelTalkSuppressedPath,
-  openChannelTalk,
-} from "@/lib/channel-talk";
+import { isChannelTalkSuppressedPath } from "@/lib/channel-talk";
 import {
   isChannelTalkEnabled,
   useChannelTalkStatus,
 } from "@/lib/channel-talk-status";
+import { ConsultSentNotice } from "@/components/consult/ConsultSentNotice";
+import { useConsultEntry } from "@/hooks/useConsultEntry";
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL_HREF } from "@/lib/contact";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +27,7 @@ export function HeaderConsultButton() {
   // 전화번호는 그대로 노출해 본인확인 중에도 전화 상담은 가능하게 둔다.
   const channelTalkSuppressed = isChannelTalkSuppressedPath(pathname);
   const channelTalkEnabled = isChannelTalkEnabled(useChannelTalkStatus());
+  const { start, status, reset } = useConsultEntry();
 
   // 키보드·닫기 버튼으로 닫을 때는 트리거로 포커스를 되돌려 탐색 위치를 잃지 않게 한다.
   const closeAndRestoreFocus = useCallback(() => {
@@ -64,7 +64,8 @@ export function HeaderConsultButton() {
 
   function handleChannelTalk() {
     if (!channelTalkEnabled) return;
-    openChannelTalk();
+    // 모바일 회원(플래그 ON)은 알림톡 라우팅, 그 외는 기존 카카오/위젯.
+    start("header");
     setOpen(false);
   }
 
@@ -72,6 +73,7 @@ export function HeaderConsultButton() {
     // 패널은 이 래퍼가 아니라 Header 의 헤더 바(relative 컨테이너)를 기준으로 정렬된다.
     // 버튼 기준으로 잡으면 좁은 화면에서 왼쪽으로 넘쳐 별도 보정이 필요하기 때문이다.
     <div ref={consultRef}>
+      <ConsultSentNotice open={status === "sent"} onClose={reset} />
       <button
         type="button"
         ref={triggerRef}

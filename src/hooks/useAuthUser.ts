@@ -15,7 +15,19 @@ export function useAuthUser(): { user: User | null; isLoading: boolean } {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const supabase = createClient();
+    // Supabase 클라이언트 생성이 실패해도(예: 환경변수 미설정) 훅이 크래시하지 않도록
+    // 방어한다 — 이 경우 비회원(user=null)으로 둔다. setState 는 프라미스로 미뤄
+    // 이펙트 본문 동기 setState 경고를 피한다(아래 정상 경로와 동일한 방식).
+    let supabase: ReturnType<typeof createClient>;
+    try {
+      supabase = createClient();
+    } catch {
+      void Promise.resolve().then(() => {
+        setUser(null);
+        setIsLoading(false);
+      });
+      return;
+    }
 
     supabase.auth
       .getUser()

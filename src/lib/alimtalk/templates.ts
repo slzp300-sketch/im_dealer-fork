@@ -14,7 +14,8 @@ export type AlimtalkTemplateKey =
   | "QUOTE_DELIVERED"
   | "QUOTE_CONSULT"
   | "REVIEW_REQUEST"
-  | "SIGNUP_COMPLETED";
+  | "SIGNUP_COMPLETED"
+  | "CONSULT_REQUEST";
 
 /** 비즈톡센터에 등록할 원문. 검수 접수 시 이 문자열을 그대로 붙여넣는다. */
 export const QUOTE_DELIVERED_DRAFT = `[아임딜러] 견적서 도착 안내
@@ -217,6 +218,37 @@ export function buildSignupCompletedButtons(): AlimtalkWebLinkButton[] {
       url_pc: SIGNUP_COMPLETED_MYPAGE_URL,
     },
   ];
+}
+
+// ── 상담 신청 안내 (범용) ──────────────────────────────────
+// 웹의 여러 상담 진입점(이벤트·차량상세·AI추천 등)에서 전화번호를 남긴 고객에게
+// 우리가 먼저 보내는 공용 안내톡. 카카오 상담톡은 고객이 먼저 말을 걸어야 열리므로,
+// 이 톡의 상담톡전환(BC) 버튼으로 상담을 연다. 진입 경로마다 템플릿을 따로 검수받지
+// 않도록 본문은 진입점과 무관한 고정 문구로 두고(변수 없음), 유입 경로는 발송 시
+// chat_extra 로만 구분한다. 비회원(이름 미확보)도 대상이라 본문에 변수를 두지 않는다.
+
+/** 비즈톡센터에 등록할 원문. 검수 접수 시 이 문자열을 그대로 붙여넣는다. */
+export const CONSULT_REQUEST_DRAFT = `[아임딜러] 상담 신청 완료
+
+요청하신 상담이 접수되었습니다.
+
+아래 버튼을 누르시면 상담이 바로 시작됩니다.
+장기렌트·리스 조건을 편하게 확인하실 수 있도록 도와드리겠습니다.
+
+※ 본 메시지는 상담을 신청하신 고객님께 발송되는 안내입니다.`;
+
+export function buildConsultRequestMessage(): string {
+  // 변수 없는 고정 본문 — 등록 원문과 글자 단위로 일치해야 한다(3016 예방).
+  return CONSULT_REQUEST_DRAFT;
+}
+
+/**
+ * 상담톡전환 버튼. chat_extra 는 상담사 데스크에 유입 경로(이벤트·차량상세 등)를
+ * 남기는 라벨로 쓴다 — 요청번호가 없으므로 매칭용이 아니라 표시용이다.
+ * 버튼명·유형·개수는 등록 템플릿과 일치해야 하고(3027 예방), chat_extra 값만 가변이다.
+ */
+export function buildConsultRequestButtons(chatExtra: string): [AlimtalkConsultButton] {
+  return [{ name: "상담 시작하기", type: "BC", chat_extra: chatExtra || "상담신청" }];
 }
 
 /**
