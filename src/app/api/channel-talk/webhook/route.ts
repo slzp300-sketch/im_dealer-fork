@@ -195,6 +195,18 @@ export async function POST(request: NextRequest) {
   // 안내 없이 발송만 된다.
   const userChatId = extractUserChatId(body);
 
+  // [임시 검증] 고객이 메시지를 보낼 때 그 상담을 수신함에 올려본다 — open 호출이
+  // AI(ALF)를 멈추는지 실측하기 위한 것. 플래그(OPEN_CONSULT_ON_MESSAGE)로만 동작하고,
+  // personType=user 인 고객 메시지에만 건다(봇·매니저 제외). 검증이 끝나면 제거한다.
+  if (
+    process.env.OPEN_CONSULT_ON_MESSAGE === "true" &&
+    userChatId &&
+    extractCustomerPersonId(body)
+  ) {
+    console.log("[channel-talk webhook] [검증] 고객 메시지 → 상담 열기 시도");
+    await openChannelTalkUserChat(userChatId);
+  }
+
   try {
     if (requestCode) {
       const result = await dispatchQuoteDeliveryByRequestCode(requestCode);
