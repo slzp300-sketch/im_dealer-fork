@@ -21,9 +21,17 @@ export function isChannelTalkSuppressedPath(pathOrUrl: string): boolean {
   );
 }
 
-// 모바일은 채널톡 위젯 대신 카카오 채널 대화방으로 보낸다(접속 환경별 분리 — PC는
-// 위젯 유지). 반드시 클릭 핸들러에서 동기적으로 window.open 해야 팝업 차단을 피한다.
-// 팝업이 막히면 같은 탭 이동으로 폴백한다. 카카오 URL 미설정이면 false 로 위젯에 맡긴다.
+// 모바일 전면 카카오 전환을 켤지(접속 환경별 분리). 기본 꺼짐 — 지금은 모바일도
+// PC 처럼 채널톡 위젯을 열어 인사말이 나가게 한다. 카카오 직결은 모바일에서 새 상담이
+// 안 열려(기존 대화방) 상담 시작 안내가 안 나가는 문제가 있어, 세션 링크/알림톡 등
+// 대안이 준비되면 env 로 다시 켠다.
+function isMobileKakaoDirectEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_MOBILE_KAKAO_DIRECT === "true";
+}
+
+// 모바일은 채널톡 위젯 대신 카카오 채널 대화방으로 보낸다(플래그로 켜야 동작). 반드시
+// 클릭 핸들러에서 동기적으로 window.open 해야 팝업 차단을 피한다. 팝업이 막히면 같은 탭
+// 이동으로 폴백한다. 카카오 URL 미설정이면 false 로 위젯에 맡긴다.
 function openKakaoChat(): boolean {
   const url = kakaoChannelChatUrl();
   if (!url) return false;
@@ -34,8 +42,8 @@ function openKakaoChat(): boolean {
 
 export function openChannelTalk(): boolean {
   if (typeof window === "undefined") return false;
-  // 모바일: 전면 카카오 전환. PC: 채널톡 위젯 유지.
-  if (isMobileDevice() && openKakaoChat()) return true;
+  // 모바일 카카오 직결(플래그 ON)일 때만 카카오로. 그 외(기본)는 채널톡 위젯.
+  if (isMobileKakaoDirectEnabled() && isMobileDevice() && openKakaoChat()) return true;
   if (!window.ChannelIO) return false;
 
   window.ChannelIO("showMessenger");
@@ -44,9 +52,9 @@ export function openChannelTalk(): boolean {
 
 export function openChannelTalkWithQuote(context: ChannelTalkQuoteContext): boolean {
   if (typeof window === "undefined") return false;
-  // 모바일은 카카오로 보낸다. 견적 컨텍스트 track 은 웹 위젯(브라우저) 식별 기준이라
-  // 카카오(별도 식별)엔 붙지 않으므로 이 경로에선 생략한다.
-  if (isMobileDevice() && openKakaoChat()) return true;
+  // 모바일 카카오 직결(플래그 ON)일 때만 카카오로. track 은 웹 위젯(브라우저) 식별
+  // 기준이라 카카오(별도 식별)엔 안 붙어 이 경로에선 생략한다.
+  if (isMobileKakaoDirectEnabled() && isMobileDevice() && openKakaoChat()) return true;
   if (!window.ChannelIO) return false;
 
   window.ChannelIO("track", "quote_consultation_requested", context);

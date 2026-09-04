@@ -23,7 +23,7 @@ const quoteContext = {
   annualMileage: 20000,
 };
 
-describe("openChannelTalk — 접속 환경별 분리(모바일 카카오 / PC 위젯)", () => {
+describe("openChannelTalk — 접속 환경별 분리(모바일 카카오 직결 플래그 / PC 위젯)", () => {
   let channelIO: ReturnType<typeof vi.fn>;
   let openSpy: ReturnType<typeof vi.fn>;
 
@@ -36,11 +36,13 @@ describe("openChannelTalk — 접속 환경별 분리(모바일 카카오 / PC �
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     delete (window as unknown as { ChannelIO?: unknown }).ChannelIO;
     vi.clearAllMocks();
   });
 
-  it("모바일이면 카카오 대화방을 열고 채널톡 위젯은 열지 않는다", () => {
+  it("플래그가 켜지면 모바일은 카카오 대화방을 열고 위젯은 열지 않는다", () => {
+    vi.stubEnv("NEXT_PUBLIC_MOBILE_KAKAO_DIRECT", "true");
     mocks.isMobileDevice.mockReturnValue(true);
 
     expect(openChannelTalk()).toBe(true);
@@ -48,7 +50,16 @@ describe("openChannelTalk — 접속 환경별 분리(모바일 카카오 / PC �
     expect(channelIO).not.toHaveBeenCalled();
   });
 
-  it("PC 면 채널톡 위젯을 연다(카카오로 보내지 않는다)", () => {
+  it("플래그가 꺼져 있으면(기본) 모바일이라도 채널톡 위젯을 연다", () => {
+    mocks.isMobileDevice.mockReturnValue(true);
+
+    expect(openChannelTalk()).toBe(true);
+    expect(channelIO).toHaveBeenCalledWith("showMessenger");
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("PC 면 (플래그와 무관하게) 채널톡 위젯을 연다", () => {
+    vi.stubEnv("NEXT_PUBLIC_MOBILE_KAKAO_DIRECT", "true");
     mocks.isMobileDevice.mockReturnValue(false);
 
     expect(openChannelTalk()).toBe(true);
@@ -56,7 +67,8 @@ describe("openChannelTalk — 접속 환경별 분리(모바일 카카오 / PC �
     expect(openSpy).not.toHaveBeenCalled();
   });
 
-  it("모바일이라도 카카오 URL 이 없으면 위젯으로 폴백한다", () => {
+  it("플래그가 켜져도 카카오 URL 이 없으면 위젯으로 폴백한다", () => {
+    vi.stubEnv("NEXT_PUBLIC_MOBILE_KAKAO_DIRECT", "true");
     mocks.isMobileDevice.mockReturnValue(true);
     mocks.kakaoChannelChatUrl.mockReturnValue(null);
 
@@ -65,12 +77,26 @@ describe("openChannelTalk — 접속 환경별 분리(모바일 카카오 / PC �
     expect(openSpy).not.toHaveBeenCalled();
   });
 
-  it("openChannelTalkWithQuote: 모바일은 카카오로 보내고 track 은 생략한다", () => {
+  it("openChannelTalkWithQuote: 플래그 ON + 모바일은 카카오로 보내고 track 은 생략", () => {
+    vi.stubEnv("NEXT_PUBLIC_MOBILE_KAKAO_DIRECT", "true");
     mocks.isMobileDevice.mockReturnValue(true);
 
     expect(openChannelTalkWithQuote(quoteContext)).toBe(true);
     expect(openSpy).toHaveBeenCalledWith(KAKAO_URL, "_blank", "noopener,noreferrer");
     expect(channelIO).not.toHaveBeenCalled();
+  });
+
+  it("openChannelTalkWithQuote: 플래그 꺼짐이면 모바일이라도 track 후 위젯", () => {
+    mocks.isMobileDevice.mockReturnValue(true);
+
+    expect(openChannelTalkWithQuote(quoteContext)).toBe(true);
+    expect(channelIO).toHaveBeenCalledWith(
+      "track",
+      "quote_consultation_requested",
+      quoteContext
+    );
+    expect(channelIO).toHaveBeenCalledWith("showMessenger");
+    expect(openSpy).not.toHaveBeenCalled();
   });
 
   it("openChannelTalkWithQuote: PC 는 견적 컨텍스트 track 후 위젯을 연다", () => {
