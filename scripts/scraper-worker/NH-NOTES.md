@@ -46,6 +46,30 @@ node scripts/scraper-worker/inspect-capital.mjs https://auto.nhcapital.co.kr/est
 - [ ] `try-config.nh.example.json` 작성 → 단독 검증
 - [ ] seed 상 NH농협캐피탈 제휴 금융사 등록 여부 확인 (등록돼 있으면 스크래퍼 연결만)
 
+## 1차 정찰 결과 (2026-09-02) — 로그인 흐름만 확인, 견적 미도달 ⚠️
+
+`nh-recon.json`(24콜) 분석 결과, **로그인·인증만 캡처되고 견적은 못 냈다.** `endedBy: browser-closed`, `finalUrl: .../login.nh` (로그인 페이지에서 종료). 후반 시도가 **"비밀번호 분실 처리되었습니다. 담당자에게 문의하세요."** → 계정 비번 잠김.
+
+확인된 사실(유용):
+
+- **견적 흐름은 JSON AJAX** — auth도 `POST /estimate/ajax/EST***.nh` 가 `application/json`. 로그인 세션(쿠키)만 확보하면 **리플레이 방식 어댑터 가능**(BNK/ORIX형).
+- 인증 흐름 엔드포인트:
+  - `EST101M.nh` — **로그인**. reqBody 는 nProtect 암호화(`__E2E_RESULT__`, `__E2E_UNIQUE__`, `HMPG_PW__E2E__`). 성공 응답: `LOGIN_SCS_YN:"Y"`, `RNCA_AUTH_YN`, `DPT_NM`, `CRTF_SQNO_S30`. 실패 응답: `LOGIN_SCS_YN:"N"` + `LOGIN_ERR_MSG`(예: "비밀번호 분실 처리…").
+  - `EST102.nh` — **SMS 2차 인증**. req `{TRX_SQNO_S30, SMS_CRTF_NO_S6(6자리), USERID}`.
+  - `EST103.nh` — 인증 시퀀스 확정 `{HMPG_LOGIN_ID}` → `CRTF_SQNO_S30`.
+- 어댑터 로그인 성공/실패 판정은 EST101M 응답의 `LOGIN_SCS_YN`으로. (login=사람이 nProtect 입력, 어댑터는 응답으로 성공 감지 후 세션 유지)
+
+### 🚫 블로커 & 재정찰 필요
+
+견적 API(브랜드·모델·트림·조건·월납입금 계산)가 **하나도 안 잡혔다.** 어댑터 작성 불가. 다음이 필요:
+
+1. **NH 계정 비번 잠금 해제** (담당자 문의/재설정 — 현재 "분실 처리" 상태).
+2. **깨끗한 재정찰**: 로그인 성공 → **견적 1건을 끝까지** (브랜드→모델→트림→조건→월납입금까지) 낸 뒤 **터미널에서 Enter**(브라우저 닫지 말 것)로 저장.
+   ```
+   node scripts/scraper-worker/inspect-capital.mjs https://auto.nhcapital.co.kr/estimate/est/login.nh nh-recon.json
+   ```
+3. 그 nh-recon.json 을 다시 분석 → 견적 엔드포인트/파라미터 확정 → `adapters/nh.ts` 작성.
+
 ## 메모
 
-- (정찰하며 채운다)
+- 계정 79208611. 비번 재설정 후 재정찰 재시도 예정.
