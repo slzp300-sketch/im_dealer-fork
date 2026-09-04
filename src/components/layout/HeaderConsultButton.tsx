@@ -3,37 +3,41 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Headset, MessageCircle, Phone, X } from "lucide-react";
-import { isChannelTalkSuppressedPath } from "@/lib/channel-talk";
+import {
+  isChannelTalkSuppressedPath,
+  openChannelTalk,
+} from "@/lib/channel-talk";
+import { isMobileDevice } from "@/lib/browser/device";
 import {
   isChannelTalkEnabled,
   useChannelTalkStatus,
 } from "@/lib/channel-talk-status";
-import { ConsultSentNotice } from "@/components/consult/ConsultSentNotice";
-import { useConsultEntry } from "@/hooks/useConsultEntry";
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL_HREF } from "@/lib/contact";
 import { cn } from "@/lib/utils";
+import { KakaoConsultGuideModal } from "@/components/layout/KakaoConsultGuideModal";
 
 /**
  * 헤더 우측 통합 상담 버튼.
- * 패널에 채널톡 상담(로그인 불필요)과 전화 상담 두 가지 진입점을 보여준다.
+ * 모바일은 카카오 채널 안내를, 데스크톱은 채널톡·전화 상담 패널을 보여준다.
  * 전화 항목은 행 자체가 tel: 링크라 한 번 탭으로 바로 발신된다.
  */
 export function HeaderConsultButton() {
   const pathname = usePathname() ?? "";
   const [open, setOpen] = useState(false);
+  const [kakaoGuideOpen, setKakaoGuideOpen] = useState(false);
   const consultRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   // /verify 등 채널톡 위젯이 shutdown 되는 경로에서는 채널톡 항목을 숨긴다.
   // 전화번호는 그대로 노출해 본인확인 중에도 전화 상담은 가능하게 둔다.
   const channelTalkSuppressed = isChannelTalkSuppressedPath(pathname);
   const channelTalkEnabled = isChannelTalkEnabled(useChannelTalkStatus());
-  const { start, status, reset } = useConsultEntry();
 
   // 키보드·닫기 버튼으로 닫을 때는 트리거로 포커스를 되돌려 탐색 위치를 잃지 않게 한다.
   const closeAndRestoreFocus = useCallback(() => {
     setOpen(false);
     triggerRef.current?.focus();
   }, []);
+  const closeKakaoGuide = useCallback(() => setKakaoGuideOpen(false), []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -64,24 +68,31 @@ export function HeaderConsultButton() {
 
   function handleChannelTalk() {
     if (!channelTalkEnabled) return;
-    // 모바일 회원(플래그 ON)은 알림톡 라우팅, 그 외는 기존 카카오/위젯.
-    start("header");
+    openChannelTalk();
     setOpen(false);
+  }
+
+  function handleTriggerClick() {
+    if (isMobileDevice()) {
+      setOpen(false);
+      setKakaoGuideOpen(true);
+      return;
+    }
+    setOpen((current) => !current);
   }
 
   return (
     // 패널은 이 래퍼가 아니라 Header 의 헤더 바(relative 컨테이너)를 기준으로 정렬된다.
     // 버튼 기준으로 잡으면 좁은 화면에서 왼쪽으로 넘쳐 별도 보정이 필요하기 때문이다.
     <div ref={consultRef}>
-      <ConsultSentNotice open={status === "sent"} onClose={reset} />
       <button
         type="button"
         ref={triggerRef}
-        onClick={() => setOpen((current) => !current)}
+        onClick={handleTriggerClick}
         className="flex min-h-11 items-center gap-1.5 rounded-pill bg-[var(--color-channeltalk-action)] px-3.5 text-[13px] font-bold text-[var(--color-channeltalk-ink)] transition-colors hover:bg-[var(--color-channeltalk-action-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-focus-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:gap-2 sm:px-4 sm:text-[14px]"
         aria-label="상담하기"
         aria-controls="header-consult-panel"
-        aria-expanded={open}
+        aria-expanded={open || kakaoGuideOpen}
       >
         <Headset size={18} strokeWidth={2.2} />
         상담하기
@@ -154,6 +165,11 @@ export function HeaderConsultButton() {
           </a>
         </div>
       )}
+
+      <KakaoConsultGuideModal
+        open={kakaoGuideOpen}
+        onClose={closeKakaoGuide}
+      />
     </div>
   );
 }

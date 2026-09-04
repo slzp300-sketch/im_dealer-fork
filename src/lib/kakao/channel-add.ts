@@ -17,3 +17,18 @@ export function kakaoChannelChatUrl(): string | null {
   }
   return `https://pf.kakao.com/${id}/chat`;
 }
+
+/**
+ * 사용자 클릭 핸들러 안에서 카카오 채널 채팅을 연다.
+ * 팝업이 차단되면 현재 탭으로 이동해 상담 진입이 끊기지 않게 한다.
+ */
+export function openKakaoChannelChat(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const url = kakaoChannelChatUrl();
+  if (!url) return false;
+
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (!opened) window.location.href = url;
+  return true;
+}

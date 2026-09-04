@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Header } from "./Header";
 import type { ChannelTalkStatus } from "@/lib/channel-talk-status";
 
@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
   fetch: vi.fn(),
   openChannelTalk: vi.fn(),
+  openKakaoChannelChat: vi.fn(() => true),
   state: { pathname: "/", channelStatus: null as ChannelTalkStatus | null },
 }));
 
@@ -43,6 +44,10 @@ vi.mock("@/lib/channel-talk-status", async (importOriginal) => ({
   useChannelTalkStatus: () => mocks.state.channelStatus,
 }));
 
+vi.mock("@/lib/kakao/channel-add", () => ({
+  openKakaoChannelChat: () => mocks.openKakaoChannelChat(),
+}));
+
 describe("Header 상담하기 · My 메뉴", () => {
   beforeEach(() => {
     mocks.state.pathname = "/";
@@ -52,7 +57,14 @@ describe("Header 상담하기 · My 메뉴", () => {
     mocks.fetch.mockReset();
     mocks.push.mockReset();
     mocks.openChannelTalk.mockReset();
+    mocks.openKakaoChannelChat.mockReset();
+    mocks.openKakaoChannelChat.mockReturnValue(true);
     vi.stubGlobal("fetch", mocks.fetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   function openConsultPanel() {
@@ -75,6 +87,24 @@ describe("Header 상담하기 · My 메뉴", () => {
     expect(
       screen.getByRole("menuitem", { name: /전화 상담하기/ }),
     ).toHaveAttribute("href", "tel:16888479");
+  });
+
+  it("모바일에서는 상담하기를 누르면 로그인 없이 카카오 채널 안내를 보여준다", () => {
+    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+    );
+    render(<Header />);
+
+    fireEvent.click(screen.getByRole("button", { name: "상담하기" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "카카오톡에서 상담을 시작할게요" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /채널톡 상담하기/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "카카오톡 상담 시작하기" }));
+    expect(mocks.openKakaoChannelChat).toHaveBeenCalledTimes(1);
+    expect(mocks.openChannelTalk).not.toHaveBeenCalled();
   });
 
   it("채널톡 옵션을 누르면 메신저를 열고 패널을 닫는다", () => {

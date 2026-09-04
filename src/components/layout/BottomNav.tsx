@@ -4,13 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion, type Transition } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { openChannelTalk } from "@/lib/channel-talk";
-import {
-  isChannelTalkEnabled,
-  useChannelTalkStatus,
-} from "@/lib/channel-talk-status";
 import { cn } from "@/lib/utils";
 import { CarFront, ClipboardCheck, Home, Menu, MessageCircle, type LucideIcon } from "lucide-react";
+import { KakaoConsultGuideModal } from "@/components/layout/KakaoConsultGuideModal";
 import {
   DOCK_BOTTOM_PADDING_CLASS,
   STACK_OFFSET_COLLAPSED,
@@ -22,14 +18,14 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   exact: boolean;
-  channelTalk?: boolean;
+  consultation?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "홈", icon: Home, exact: true },
   { href: "/recommend", label: "AI 추천", icon: ClipboardCheck, exact: false },
   { href: "/cars", label: "차량 탐색", icon: CarFront, exact: false },
-  { label: "상담", icon: MessageCircle, exact: false, channelTalk: true },
+  { label: "상담", icon: MessageCircle, exact: false, consultation: true },
 ];
 
 /**
@@ -82,9 +78,9 @@ function clearStackOffset() {
 export function BottomNav() {
   const pathname = usePathname() ?? "";
   const isHome = pathname === "/";
-  const channelTalkEnabled = isChannelTalkEnabled(useChannelTalkStatus());
   const prefersReducedMotion = useReducedMotion();
   const [collapsed, setCollapsed] = useState(false);
+  const [kakaoGuideOpen, setKakaoGuideOpen] = useState(false);
   const collapsedRef = useRef(false);
   const lastScrollY = useRef(0);
   const downAccum = useRef(0);
@@ -122,6 +118,7 @@ export function BottomNav() {
     collapsedRef.current = false;
     setCollapsed(false);
   }, []);
+  const closeKakaoGuide = useCallback(() => setKakaoGuideOpen(false), []);
 
   useEffect(() => {
     collapsedRef.current = collapsed;
@@ -183,14 +180,14 @@ export function BottomNav() {
     return null;
   }
 
-  const isActive = (href: string | undefined, exact: boolean, channelTalk?: boolean) => {
-    if (channelTalk || !href) return false;
+  const isActive = (href: string | undefined, exact: boolean, consultation?: boolean) => {
+    if (consultation || !href) return false;
     if (exact) return pathname === href;
     return pathname.startsWith(href);
   };
 
   const activeItem =
-    NAV_ITEMS.find((item) => isActive(item.href, item.exact, item.channelTalk)) ?? NAV_ITEMS[0];
+    NAV_ITEMS.find((item) => isActive(item.href, item.exact, item.consultation)) ?? NAV_ITEMS[0];
   const ActiveIcon = activeItem.icon;
 
   return (
@@ -221,8 +218,8 @@ export function BottomNav() {
               }
               transition={dockTransition}
             >
-              {NAV_ITEMS.map(({ href, label, icon: Icon, exact, channelTalk }) => {
-                const active = isActive(href, exact, channelTalk);
+              {NAV_ITEMS.map(({ href, label, icon: Icon, exact, consultation }) => {
+                const active = isActive(href, exact, consultation);
 
                 const inner = (
                   <motion.span
@@ -267,16 +264,14 @@ export function BottomNav() {
                   active ? "bg-surface" : "hover:bg-surface-soft active:bg-surface-soft",
                 );
 
-                if (channelTalk) {
+                if (consultation) {
                   return (
                     <button
-                      key="channeltalk"
+                      key="consultation"
                       type="button"
                       className={wrapperClass}
-                      aria-label={channelTalkEnabled ? label : "채팅 준비 중"}
-                      title={channelTalkEnabled ? undefined : "잠시 후 다시"}
-                      disabled={!channelTalkEnabled}
-                      onClick={openChannelTalk}
+                      aria-label={label}
+                      onClick={() => setKakaoGuideOpen(true)}
                     >
                       {inner}
                     </button>
@@ -343,6 +338,10 @@ export function BottomNav() {
           )}
         </AnimatePresence>
       </div>
+      <KakaoConsultGuideModal
+        open={kakaoGuideOpen}
+        onClose={closeKakaoGuide}
+      />
     </nav>
   );
 }

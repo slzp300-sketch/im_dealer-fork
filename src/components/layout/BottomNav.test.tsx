@@ -10,6 +10,7 @@ import {
 const mocks = vi.hoisted(() => ({
   pathname: "/",
   openChannelTalk: vi.fn(),
+  openKakaoChannelChat: vi.fn(() => true),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -18,6 +19,10 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/channel-talk", () => ({
   openChannelTalk: () => mocks.openChannelTalk(),
+}));
+
+vi.mock("@/lib/kakao/channel-add", () => ({
+  openKakaoChannelChat: () => mocks.openKakaoChannelChat(),
 }));
 
 vi.mock("framer-motion", async () => {
@@ -77,6 +82,8 @@ describe("BottomNav scroll collapse", () => {
   beforeEach(() => {
     mocks.pathname = "/cars/genesis-11644";
     mocks.openChannelTalk.mockReset();
+    mocks.openKakaoChannelChat.mockReset();
+    mocks.openKakaoChannelChat.mockReturnValue(true);
     setScrollY(0);
     document.documentElement.style.removeProperty("--bottom-nav-stack-offset");
     vi.stubGlobal(
@@ -104,6 +111,20 @@ describe("BottomNav scroll collapse", () => {
     expect(document.documentElement.style.getPropertyValue("--bottom-nav-stack-offset")).toBe(
       STACK_OFFSET_EXPANDED,
     );
+  });
+
+  it("하단 상담을 누르면 안내 후 로그인 없이 카카오 채널로 연결한다", () => {
+    render(<BottomNav />);
+
+    fireEvent.click(screen.getByRole("button", { name: "상담" }));
+    expect(
+      screen.getByRole("dialog", { name: "카카오톡에서 상담을 시작할게요" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/회원가입이나 로그인 없이/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "카카오톡 상담 시작하기" }));
+    expect(mocks.openKakaoChannelChat).toHaveBeenCalledTimes(1);
+    expect(mocks.openChannelTalk).not.toHaveBeenCalled();
   });
 
   it("스크롤을 내리면 점(FAB)으로 축소된다", () => {
