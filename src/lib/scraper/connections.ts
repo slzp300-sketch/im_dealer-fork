@@ -30,6 +30,12 @@ const CONNECTIONS: { match: (name: string) => boolean; conn: CapitalConnection }
     match: (n) => n.includes("JB") || n.includes("전북") || n.includes("우리캐피탈"),
     conn: { adapter: "JBWOORI", loginUrl: "https://emp.wooricap.com/sale/log/mdSaleLog0010.do", requiresHuman: true },
   },
+  {
+    // IM캐피탈(옛 DGB캐피탈) — 포털 SMS 인증 + 견적내기 token 핸드셰이크 → 헤드풀 사람 로그인.
+    // 어댑터가 카탈로그 수집 전용(scrapeTrim 미지원) — 월렌트료는 견적 UI CDP 실클릭 구동으로 산출.
+    match: (n) => n.includes("아이엠") || n.includes("IM캐피") || n.toUpperCase().includes("DGB"),
+    conn: { adapter: "IM", loginUrl: "https://www.imcap.co.kr/admin/dgbLogin.do", requiresHuman: true, catalogOnly: true },
+  },
 ];
 
 /** 캐피탈사명으로 접속 설정을 찾는다. 지원하지 않는 곳이면 null. */

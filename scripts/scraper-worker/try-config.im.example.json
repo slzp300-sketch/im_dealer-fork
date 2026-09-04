@@ -1,0 +1,12 @@
+{
+  "_설명": "IM캐피탈(옛 DGB) 어댑터 단독 검증용. try-config.json 으로 복사 후 실행. 로그인은 헤드풀 사람 개입(포털 SMS 인증 + 견적내기 token 핸드셰이크) — 사람이 견적 화면(auto.dgbcap.com/newcar/estimate/rent)까지 진입해야 window.token 을 캡처한다. 월렌트료는 서버 계산이 없어 견적 UI 를 CDP 실클릭으로 구동해 읽는다(트림당 수십초, 느림). IM 은 카탈로그 수집(catalog) 전용 — trimIds 지정 수집(scrapeTrim) 미지원. (IM-NOTES.md 참고)",
+  "loginUrl": "https://www.imcap.co.kr/admin/dgbLogin.do",
+  "config": {
+    "adapter": "IM"
+  },
+  "brands": [
+    { "brandCd": "111", "name": "현대", "modelCds": ["11896"] }
+  ],
+  "weekOf": "2026-09-07",
+  "productType": "장기렌트"
+}
