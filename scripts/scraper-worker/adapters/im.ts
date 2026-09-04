@@ -156,7 +156,7 @@ async function realClick(page: Page, client: CDPSession, sel: string, cellIdx?: 
       if (!root) return null;
       const el = root.querySelector(s) as HTMLElement | null;
       if (!el) return null;
-      el.scrollIntoView({ block: "center" });
+      el.scrollIntoView({ block: "center", inline: "center" }); // 브랜드/모델/라인업은 이미지 슬라이더 — 가로 스크롤 필요
       const r = el.getBoundingClientRect();
       return { x: r.x + r.width / 2, y: r.y + r.height / 2, vis: r.width > 0 && r.height > 0 };
     },
@@ -169,21 +169,37 @@ async function realClick(page: Page, client: CDPSession, sel: string, cellIdx?: 
   return true;
 }
 
-/** 차량 selbar(kind=brand/model/lineup/trim) 에서 code 옵션을 실클릭 선택(열기→선택). */
+/** 해당 kind 드롭다운의 옵션 리스트(.list)가 펼쳐져 있는지. */
+async function isSelbarOpen(page: Page, kind: SelKind): Promise<boolean> {
+  return page
+    .evaluate((k) => {
+      const l = document.querySelector(`.estmCell .selbar[kind='${k}'] .list`);
+      return !!l && getComputedStyle(l as Element).display === "block";
+    }, kind)
+    .catch(() => false);
+}
+
+/**
+ * 차량 selbar(kind=brand/model/lineup/trim) 에서 code 옵션을 실클릭 선택.
+ * 열기 버튼은 토글이라 **이미 열려 있으면 다시 누르지 않는다**(누르면 닫혀 옵션 클릭 실패).
+ * 브랜드/모델/라인업은 이미지 슬라이더 → realClick 의 inline:center 스크롤로 아이템을 뷰에 넣는다.
+ */
 async function pickSelbar(page: Page, client: CDPSession, kind: SelKind, code: string): Promise<boolean> {
-  const open = await realClick(page, client, `.estmCell .selbar[kind='${kind}'] > button`);
-  if (!open) return false;
-  await sleep(WAIT_OPEN);
+  if (!(await isSelbarOpen(page, kind))) {
+    const open = await realClick(page, client, `.estmCell .selbar[kind='${kind}'] > button`);
+    if (!open) return false;
+    await sleep(WAIT_OPEN);
+  }
   const pick = await realClick(page, client, `.estmCell .selbar[kind='${kind}'] .list li[${kind}='${code}'] button`);
   if (!pick) return false;
   await sleep(WAIT_PICK_SELBAR);
   return true;
 }
 
+type ColRead = { month: string; km: string; remain: string; rent: number };
+
 /** 견적폼에 로드된 각 컬럼(.fincCell)의 조건 코드 + 월렌트료 읽기. */
-async function readColumns(
-  page: Page
-): Promise<{ month: string; km: string; remain: string; rent: number }[]> {
+async function readColumns(page: Page): Promise<ColRead[]> {
   return page.evaluate(() =>
     [...document.querySelectorAll(".fincCell")].map((c) => ({
       month: c.querySelector(".selsub[kind='monthSel']")?.getAttribute("code") ?? "",
@@ -194,6 +210,22 @@ async function readColumns(
       ),
     }))
   );
+}
+
+/**
+ * 재계산이 끝나 월렌트료가 멈출 때까지 폴링한 뒤 읽는다 — 이율 이분법·다열 재계산이
+ * 비동기라, 고정 대기만으로 읽으면 중간값(오염)을 잡을 수 있다. 연속 2회 동일하면 정착으로 본다.
+ */
+async function readColumnsStable(page: Page, maxMs = 8000): Promise<ColRead[]> {
+  let prev = await readColumns(page);
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    await sleep(400);
+    const cur = await readColumns(page);
+    if (cur.length === prev.length && cur.every((c, i) => c.rent === prev[i].rent && c.rent > 0)) return cur;
+    prev = cur;
+  }
+  return prev;
 }
 
 interface CollectResult {
@@ -254,6 +286,8 @@ async function collectTrim(
     warnings.push("결과 컬럼(.fincCell) 없음");
     return { baseRates, warnings, residualByCell };
   }
+  // 트림 로드 재계산이 끝날 때까지 정착 대기 — 곧바로 km 를 바꾸면 이전 재계산과 겹쳐 중간값 오염.
+  await readColumnsStable(page);
 
   for (const { km, dist } of KM_CODES) {
     if (ctx.isCanceled()) break;
@@ -272,7 +306,7 @@ async function collectTrim(
       warnings.push(`km=${km} 세팅 실패`);
       continue;
     }
-    const cols = await readColumns(page);
+    const cols = await readColumnsStable(page); // 재계산 정착 후 읽기
     for (const c of cols) {
       if (!c.month) continue;
       const key = `${c.month}_${dist}`;
